@@ -61,6 +61,7 @@ python main.py http --port 8000
 ### 3. 测试连接
 ```bash
 # 测试HTTP Stream + ReACT工作流
+cd tests
 python test_http_stream.py
 ```
 
@@ -195,10 +196,18 @@ curl -X POST http://localhost:8002/mcp \
 pptMcpSeriver/
 ├── main.py                          # 主程序
 ├── http_stream_transport.py         # HTTP Stream实现
-├── test_http_stream.py             # 测试客户端
-├── USAGE.md                        # 详细使用说明
-├── README.md                       # 项目说明
-└── pyproject.toml                  # 依赖配置
+├── fixed_sse_transport.py           # SSE修复实现
+├── pyproject.toml                   # 依赖配置
+├── tests/                           # 测试文件
+│   ├── README.md                    # 测试说明
+│   ├── test_http_stream.py          # HTTP Stream测试
+│   ├── test_simple_ppt.py           # 基础功能测试
+│   └── diagnose_api.py              # API诊断工具
+└── docs/                            # 项目文档
+    ├── README.md                    # 文档目录
+    ├── USAGE.md                     # 详细使用说明
+    ├── HTTP_STREAM_GUIDE.md         # HTTP Stream指南
+    └── SSE_ISSUE_ANALYSIS.md        # SSE问题分析
 ```
 
 ### 技术栈
@@ -219,17 +228,28 @@ pptMcpSeriver/
 python main.py http-stream
 
 # 2. 测试工作流
+cd tests
 python test_http_stream.py
 
 # 3. 查看状态
 curl http://localhost:8002/
 ```
 
+## 📚 文档资源
+
+- 📖 [详细使用说明](./docs/USAGE.md) - 完整功能指南
+- 🌐 [HTTP Stream指南](./docs/HTTP_STREAM_GUIDE.md) - 最新传输协议
+- 🔧 [SSE问题分析](./docs/SSE_ISSUE_ANALYSIS.md) - 兼容性修复
+- 🧪 [测试说明](./tests/README.md) - 测试工具使用
+
 ## 🤝 支持与反馈
 
 如遇问题请检查：
 1. 端口是否被占用
-2. 依赖是否正确安装
+2. 依赖是否正确安装  
 3. API密钥是否有效
 
-详细使用说明请参考 `USAGE.md`
+更多帮助请查看：
+- [完整文档](./docs/) - 详细技术文档
+- [测试工具](./tests/) - 功能验证和调试
+- [故障排除](./docs/USAGE.md#注意事项) - 常见问题解决

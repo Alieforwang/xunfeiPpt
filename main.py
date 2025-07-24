@@ -32,8 +32,8 @@ import mcp.types as types
 # 讯飞智文API密钥池配置
 API_KEY_POOL = [
     {
-        "app_id": "2dc9dc12",
-        "api_secret": "YWVmZjQ0NTI4MjkxMTEzMTA5MWZiY2M4",
+        "app_id": "your_app_id_1",
+        "api_secret": "your_api_secret_2",
         "name": "主密钥",
         "max_concurrent": 10,  # 最大并发数
         "enabled": True

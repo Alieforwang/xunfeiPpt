@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(python:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(timeout:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:spec.modelcontextprotocol.io)",
+      "WebFetch(domain:mcp-framework.com)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}

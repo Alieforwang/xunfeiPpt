@@ -12,6 +12,13 @@
   - 集成配置示例
   - 故障排除指南
 
+### 🔑 API密钥池
+- [`API_KEY_POOL_GUIDE.md`](./API_KEY_POOL_GUIDE.md) - **🆕 API密钥池配置指南**
+  - 多密钥配置方法
+  - 并发控制和负载均衡
+  - 故障转移机制
+  - 性能监控和调试
+
 ### 🌐 HTTP Stream 传输
 - [`HTTP_STREAM_GUIDE.md`](./HTTP_STREAM_GUIDE.md) - **HTTP Stream传输指南**
   - MCP 2025-03-26规范实现

@@ -7,6 +7,13 @@
 ### HTTP Stream 测试
 - [`test_http_stream.py`](./test_http_stream.py) - HTTP Stream传输协议和ReACT工作流测试
 
+### API密钥池测试
+- [`test_api_pool.py`](./test_api_pool.py) - **🆕 API密钥池功能测试**
+  - 密钥轮换机制测试
+  - 并发控制测试
+  - 故障转移测试
+  - 错误处理测试
+
 ### 基础功能测试
 - [`test_simple_ppt.py`](./test_simple_ppt.py) - 基础PPT生成功能测试
 - [`test_fixed_tool.py`](./test_fixed_tool.py) - 修复后的工具功能测试
@@ -33,6 +40,9 @@
 # 测试HTTP Stream + ReACT工作流（推荐）
 cd tests
 python test_http_stream.py
+
+# 🆕 测试API密钥池功能
+python test_api_pool.py
 
 # 测试基础PPT功能
 python test_simple_ppt.py

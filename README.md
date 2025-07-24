@@ -25,6 +25,7 @@
 - 📄 从文档创建PPT大纲
 - 🎯 根据大纲创建PPT
 - **🚀 ReACT模式完整工作流（推荐）**
+- **🔑 API密钥池状态监控（新增）**
 
 ## 🚀 快速开始
 
@@ -238,6 +239,7 @@ curl http://localhost:8002/
 ## 📚 文档资源
 
 - 📖 [详细使用说明](./docs/USAGE.md) - 完整功能指南
+- 🔑 [API密钥池配置](./docs/API_KEY_POOL_GUIDE.md) - **🆕 多密钥并发配置**
 - 🌐 [HTTP Stream指南](./docs/HTTP_STREAM_GUIDE.md) - 最新传输协议
 - 🔧 [SSE问题分析](./docs/SSE_ISSUE_ANALYSIS.md) - 兼容性修复
 - 🧪 [测试说明](./tests/README.md) - 测试工具使用

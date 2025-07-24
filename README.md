@@ -15,7 +15,7 @@
 - **stdio** - 标准输入输出（默认，适合Claude Desktop）
 - **http** - HTTP协议（端口8000，适合Web应用）
 - **sse** - Server-Sent Events（端口8001，已保留兼容）
-- **🆕 http-stream** - HTTP Stream传输（端口8002，**推荐ReACT模式使用**）
+- **~~http-stream~~** - ~~HTTP Stream传输（端口8002，测试中）~~
 
 ### 🛠️ 完整工具集
 - 🎨 获取PPT模板列表
@@ -38,11 +38,11 @@ uv sync
 
 #### 🤖 ReACT模式（推荐AI代理使用）
 ```bash
-python main.py http-stream
+python main.py http  # 暂时使用HTTP协议
 ```
-- **端口**: 8002
-- **访问**: http://localhost:8002/mcp
-- **特点**: 支持实时工作流反馈，适合AI代理
+- **端口**: 8000
+- **访问**: http://localhost:8000/mcp
+- **特点**: 支持ReACT工作流，稳定可靠
 
 #### 🖥️ Claude Desktop集成
 ```bash
@@ -61,9 +61,9 @@ python main.py http --port 8000
 
 ### 3. 测试连接
 ```bash
-# 测试HTTP Stream + ReACT工作流
+# 测试HTTP + ReACT工作流
 cd tests
-python test_http_stream.py
+python test_simple_ppt.py  # 或使用基础测试
 ```
 
 ## 🤖 ReACT工作流详解
@@ -83,7 +83,7 @@ ReACT（Reasoning and Acting）是一种AI代理工作模式，结合推理和�
 
 ### 使用示例
 ```bash
-curl -X POST http://localhost:8002/mcp \
+curl -X POST http://localhost:8000/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -128,11 +128,20 @@ curl -X POST http://localhost:8002/mcp \
 }
 ```
 
-#### HTTP Stream模式（支持ReACT）
+#### HTTP协议配置（推荐）
 ```json
 {
-  "name": "PPT生成服务-ReACT模式",
-  "type": "http-stream",
+  "name": "PPT生成服务-HTTP",
+  "type": "http",
+  "url": "http://localhost:8000/mcp"
+}
+```
+
+#### ~~HTTP Stream模式（测试中）~~
+```json
+{
+  "name": "PPT生成服务-HTTP-Stream",
+  "type": "http-stream", 
   "url": "http://localhost:8002/mcp"
 }
 ```
@@ -142,9 +151,9 @@ curl -X POST http://localhost:8002/mcp \
 | 协议 | 状态 | 适用场景 | ReACT支持 | 端口 |
 |------|------|----------|-----------|------|
 | **stdio** | ✅ 稳定 | Claude Desktop集成 | ✅ | - |
-| **http** | ✅ 稳定 | Web应用、RESTful | ✅ | 8000 |
+| **http** | ✅ **推荐** | **Web应用、AI代理** | **✅** | **8000** |
 | **sse** | ⚠️ 兼容 | 向后兼容 | ✅ | 8001 |
-| **http-stream** | 🚀 **推荐** | **AI代理、ReACT工作流** | **🎯 优化** | **8002** |
+| **~~http-stream~~** | 🧪 **测试中** | ~~实时通信~~ | ~~✅~~ | ~~8002~~ |
 
 ## 🛠️ 工具说明
 
@@ -179,7 +188,7 @@ curl -X POST http://localhost:8002/mcp \
 ## 🎯 使用建议
 
 ### 选择协议指南
-1. **AI代理/智能助手** → 使用 `http-stream`
+1. **AI代理/智能助手** → 使用 `http`（稳定推荐）
 2. **Claude Desktop** → 使用 `stdio`
 3. **Web应用集成** → 使用 `http`
 4. **向后兼容** → 保留 `sse`
@@ -220,20 +229,20 @@ pptMcpSeriver/
 ## 📈 版本历程
 - **v0.1.0** - 基础功能，stdio/http协议
 - **v0.1.1** - 修复create_outline，添加SSE支持
-- **v0.2.0** - 🚀 **新增HTTP Stream + ReACT工作流**
+- **v0.2.0** - 🚀 **新增API密钥池 + ReACT工作流**
 
 ## ⚡ 快速测试
 
 ```bash
-# 1. 启动ReACT模式服务器
-python main.py http-stream
+# 1. 启动HTTP模式服务器（推荐）
+python main.py http
 
-# 2. 测试工作流
+# 2. 测试API密钥池功能
 cd tests
-python test_http_stream.py
+python test_api_pool.py
 
 # 3. 查看状态
-curl http://localhost:8002/
+curl http://localhost:8000/
 ```
 
 ## 📚 文档资源

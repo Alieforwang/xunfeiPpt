@@ -10,7 +10,9 @@
       "Bash(grep:*)",
       "WebFetch(domain:spec.modelcontextprotocol.io)",
       "WebFetch(domain:mcp-framework.com)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

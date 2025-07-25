@@ -29,25 +29,133 @@ from mcp.types import (
 )
 import mcp.types as types
 
-# 讯飞智文API配置 - 写死在代码中
-AIPPT_APP_ID = "2dc9dc12"
-AIPPT_API_SECRET = "YWVmZjQ0NTI4MjkxMTEzMTA5MWZiY2M4"
+# 讯飞智文API密钥池配置
+API_KEY_POOL = [
+    {
+        "app_id": "2dc9dc12",
+        "api_secret": "YWVmZjQ0NTI4MjkxMTEzMTA5MWZiY2M4",
+        "name": "主密钥",
+        "max_concurrent": 10,  # 最大并发数
+        "enabled": True
+    },
+    # 可以添加更多密钥
+    {
+        "app_id": "8767f4a7",
+        "api_secret": "MDU0OTBlMzEwYjBiNDI3MDM3ODI2ZTZi", 
+        "name": "备用密钥1",
+        "max_concurrent":2,
+        "enabled": True
+    },
+    # {
+    #     "app_id": "your_app_id_3",
+    #     "api_secret": "your_api_secret_3",
+    #     "name": "备用密钥2", 
+    #     "max_concurrent": 8,
+    #     "enabled": True
+    # }
+]
+
+class APIKeyPool:
+    """API密钥池管理类"""
+    
+    def __init__(self, key_pool):
+        self.key_pool = [key for key in key_pool if key.get('enabled', True)]
+        self.current_index = 0
+        self.usage_stats = {i: {"requests": 0, "errors": 0, "concurrent": 0} 
+                           for i in range(len(self.key_pool))}
+        self._lock = asyncio.Lock() if hasattr(asyncio, 'Lock') else None
+        
+    def get_next_key(self):
+        """获取下一个可用的API密钥（轮询方式）"""
+        if not self.key_pool:
+            raise Exception("没有可用的API密钥")
+            
+        # 轮询选择
+        key_info = self.key_pool[self.current_index]
+        stats = self.usage_stats[self.current_index]
+        
+        # 检查并发限制
+        if stats["concurrent"] >= key_info.get("max_concurrent", 10):
+            # 尝试下一个密钥
+            original_index = self.current_index
+            while True:
+                self.current_index = (self.current_index + 1) % len(self.key_pool)
+                if self.current_index == original_index:
+                    # 所有密钥都达到并发限制
+                    break
+                    
+                key_info = self.key_pool[self.current_index]
+                stats = self.usage_stats[self.current_index]
+                if stats["concurrent"] < key_info.get("max_concurrent", 10):
+                    break
+        
+        return self.current_index, key_info
+    
+    def get_best_key(self):
+        """获取最优密钥（基于错误率和并发数）"""
+        if not self.key_pool:
+            raise Exception("没有可用的API密钥")
+            
+        best_index = 0
+        best_score = float('inf')
+        
+        for i, key_info in enumerate(self.key_pool):
+            stats = self.usage_stats[i]
+            
+            # 跳过达到并发限制的密钥
+            if stats["concurrent"] >= key_info.get("max_concurrent", 10):
+                continue
+                
+            # 计算评分（错误率 + 并发负载）
+            error_rate = stats["errors"] / max(stats["requests"], 1)
+            concurrent_load = stats["concurrent"] / key_info.get("max_concurrent", 10)
+            score = error_rate * 0.7 + concurrent_load * 0.3
+            
+            if score < best_score:
+                best_score = score
+                best_index = i
+                
+        return best_index, self.key_pool[best_index]
+    
+    def mark_request_start(self, key_index):
+        """标记请求开始"""
+        self.usage_stats[key_index]["requests"] += 1
+        self.usage_stats[key_index]["concurrent"] += 1
+        
+    def mark_request_end(self, key_index, success=True):
+        """标记请求结束"""
+        self.usage_stats[key_index]["concurrent"] = max(0, 
+            self.usage_stats[key_index]["concurrent"] - 1)
+        if not success:
+            self.usage_stats[key_index]["errors"] += 1
+            
+    def get_stats(self):
+        """获取使用统计"""
+        return {
+            "total_keys": len(self.key_pool),
+            "active_keys": len([k for k in self.key_pool if k.get('enabled', True)]),
+            "usage_stats": self.usage_stats,
+            "key_info": [{"name": k.get("name", f"密钥{i}"), 
+                         "concurrent": self.usage_stats[i]["concurrent"],
+                         "max_concurrent": k.get("max_concurrent", 10)} 
+                        for i, k in enumerate(self.key_pool)]
+        }
 
 class AIPPTClient:
-    """讯飞智文PPT生成客户端"""
+    """讯飞智文PPT生成客户端 - 支持API密钥池"""
     
-    def __init__(self):
-        self.app_id = AIPPT_APP_ID
-        self.api_secret = AIPPT_API_SECRET
+    def __init__(self, key_pool=None):
+        self.key_pool_manager = APIKeyPool(key_pool or API_KEY_POOL)
         self.base_url = "https://zwapi.xfyun.cn/api/ppt/v2"
-    
-    def _get_signature(self, timestamp: int) -> str:
+        self.max_retries = 3  # 最大重试次数
+        
+    def _get_signature(self, app_id: str, api_secret: str, timestamp: int) -> str:
         """生成API签名"""
         try:
             # 对app_id和时间戳进行MD5加密
-            auth = self._md5(self.app_id + str(timestamp))
+            auth = self._md5(app_id + str(timestamp))
             # 使用HMAC-SHA1算法对加密后的字符串进行加密
-            return self._hmac_sha1_encrypt(auth, self.api_secret)
+            return self._hmac_sha1_encrypt(auth, api_secret)
         except Exception as e:
             raise Exception(f"签名生成失败: {e}")
     
@@ -65,201 +173,265 @@ class AIPPTClient:
         """MD5加密"""
         return hashlib.md5(text.encode('utf-8')).hexdigest()
     
-    def _get_headers(self, content_type: str = "application/json; charset=utf-8") -> dict:
+    def _get_headers(self, key_info: dict, content_type: str = "application/json; charset=utf-8") -> dict:
         """获取请求头"""
         timestamp = int(time.time())
-        signature = self._get_signature(timestamp)
+        signature = self._get_signature(key_info["app_id"], key_info["api_secret"], timestamp)
         return {
-            "appId": self.app_id,
+            "appId": key_info["app_id"],
             "timestamp": str(timestamp),
             "signature": signature,
             "Content-Type": content_type
         }
+        
+    def _make_request_with_retry(self, request_func, *args, **kwargs):
+        """带重试的请求执行"""
+        last_exception = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                # 获取最优密钥
+                key_index, key_info = self.key_pool_manager.get_best_key()
+                
+                # 标记请求开始
+                self.key_pool_manager.mark_request_start(key_index)
+                
+                try:
+                    # 执行请求
+                    result = request_func(key_info, *args, **kwargs)
+                    
+                    # 标记请求成功
+                    self.key_pool_manager.mark_request_end(key_index, success=True)
+                    
+                    return result
+                    
+                except Exception as req_error:
+                    # 标记请求失败
+                    self.key_pool_manager.mark_request_end(key_index, success=False)
+                    
+                    # 如果是API限制错误，尝试其他密钥
+                    if "限制" in str(req_error) or "rate" in str(req_error).lower():
+                        print(f"密钥 {key_info.get('name', key_index)} 达到限制，尝试其他密钥...")
+                        continue
+                    else:
+                        raise req_error
+                        
+            except Exception as e:
+                last_exception = e
+                if attempt < self.max_retries - 1:
+                    print(f"请求失败 (尝试 {attempt + 1}/{self.max_retries}): {e}")
+                    time.sleep(1)  # 等待1秒后重试
+                else:
+                    print(f"所有重试均失败")
+                    
+        raise last_exception or Exception("请求失败，已达到最大重试次数")
+    
+    def get_pool_stats(self):
+        """获取密钥池统计信息"""
+        return self.key_pool_manager.get_stats()
     
     def get_theme_list(self, pay_type: str = "not_free", style: str = None, 
                       color: str = None, industry: str = None, 
                       page_num: int = 1, page_size: int = 10) -> dict:
         """获取PPT模板列表"""
-        url = f"{self.base_url}/template/list"
-        headers = self._get_headers()
+        def _request(key_info):
+            url = f"{self.base_url}/template/list"
+            headers = self._get_headers(key_info)
+            
+            params = {
+                "payType": pay_type,
+                "pageNum": page_num,
+                "pageSize": page_size
+            }
+            
+            if style:
+                params["style"] = style
+            if color:
+                params["color"] = color
+            if industry:
+                params["industry"] = industry
+            
+            response = requests.get(url, headers=headers, params=params)
+            return response.json()
         
-        params = {
-            "payType": pay_type,
-            "pageNum": page_num,
-            "pageSize": page_size
-        }
-        
-        if style:
-            params["style"] = style
-        if color:
-            params["color"] = color
-        if industry:
-            params["industry"] = industry
-        
-        response = requests.get(url, headers=headers, params=params)
-        return response.json()
+        return self._make_request_with_retry(_request)
     
     def create_ppt_task(self, text: str, template_id: str, author: str = "XXXX",
                        is_card_note: bool = True, search: bool = False,
                        is_figure: bool = True, ai_image: str = "normal") -> dict:
         """创建PPT生成任务"""
-        url = f"{self.base_url}/create"
-        timestamp = int(time.time())
-        signature = self._get_signature(timestamp)
-        
-        form_data = MultipartEncoder(
-            fields={
-                "query": text,
-                "templateId": template_id,
-                "author": author,
-                "isCardNote": str(is_card_note),
-                "search": str(search),
-                "isFigure": str(is_figure),
-                "aiImage": ai_image
+        def _request(key_info):
+            url = f"{self.base_url}/create"
+            timestamp = int(time.time())
+            signature = self._get_signature(key_info["app_id"], key_info["api_secret"], timestamp)
+            
+            form_data = MultipartEncoder(
+                fields={
+                    "query": text,
+                    "templateId": template_id,
+                    "author": author,
+                    "isCardNote": str(is_card_note),
+                    "search": str(search),
+                    "isFigure": str(is_figure),
+                    "aiImage": ai_image
+                }
+            )
+            
+            headers = {
+                "appId": key_info["app_id"],
+                "timestamp": str(timestamp),
+                "signature": signature,
+                "Content-Type": form_data.content_type
             }
-        )
+            
+            response = requests.post(url, data=form_data, headers=headers)
+            return response.json()
         
-        headers = {
-            "appId": self.app_id,
-            "timestamp": str(timestamp),
-            "signature": signature,
-            "Content-Type": form_data.content_type
-        }
-        
-        response = requests.post(url, data=form_data, headers=headers)
-        return response.json()
+        return self._make_request_with_retry(_request)
     
     def get_task_progress(self, sid: str) -> dict:
         """查询PPT生成任务进度"""
-        url = f"{self.base_url}/progress"
-        headers = self._get_headers()
+        def _request(key_info):
+            url = f"{self.base_url}/progress"
+            headers = self._get_headers(key_info)
+            
+            response = requests.get(url, headers=headers, params={"sid": sid})
+            return response.json()
         
-        response = requests.get(url, headers=headers, params={"sid": sid})
-        return response.json()
+        return self._make_request_with_retry(_request)
     
     def create_outline(self, text: str, language: str = "cn", search: bool = False) -> dict:
         """创建PPT大纲"""
-        url = f"{self.base_url}/createOutline"
-        timestamp = int(time.time())
-        signature = self._get_signature(timestamp)
+        def _request(key_info):
+            url = f"{self.base_url}/createOutline"
+            timestamp = int(time.time())
+            signature = self._get_signature(key_info["app_id"], key_info["api_secret"], timestamp)
+            
+            # 使用form-data格式而不是JSON
+            form_data = MultipartEncoder(fields={
+                "query": text,
+                "language": language,
+                "search": str(search)
+            })
+            
+            headers = {
+                "appId": key_info["app_id"],
+                "timestamp": str(timestamp),
+                "signature": signature,
+                "Content-Type": form_data.content_type
+            }
+            
+            response = requests.post(url, data=form_data, headers=headers)
+            return response.json()
         
-        # 使用form-data格式而不是JSON
-        form_data = MultipartEncoder(fields={
-            "query": text,
-            "language": language,
-            "search": str(search)
-        })
-        
-        headers = {
-            "appId": self.app_id,
-            "timestamp": str(timestamp),
-            "signature": signature,
-            "Content-Type": form_data.content_type
-        }
-        
-        response = requests.post(url, data=form_data, headers=headers)
-        return response.json()
+        return self._make_request_with_retry(_request)
     
     def create_outline_by_doc(self, file_name: str, text: str, file_url: str = None,
                              file_path: str = None, language: str = "cn", 
                              search: bool = False) -> dict:
         """从文档创建PPT大纲"""
-        url = f"{self.base_url}/createOutlineByDoc"
-        timestamp = int(time.time())
-        signature = self._get_signature(timestamp)
+        def _request(key_info):
+            url = f"{self.base_url}/createOutlineByDoc"
+            timestamp = int(time.time())
+            signature = self._get_signature(key_info["app_id"], key_info["api_secret"], timestamp)
+            
+            fields = {
+                "fileName": file_name,
+                "query": text,
+                "language": language,
+                "search": str(search)
+            }
+            
+            if file_url:
+                fields["fileUrl"] = file_url
+            elif file_path:
+                fields["file"] = (file_path, open(file_path, 'rb'), 'application/octet-stream')
+            else:
+                raise ValueError("file_url 或 file_path 必须提供其中一个")
+            
+            form_data = MultipartEncoder(fields=fields)
+            
+            headers = {
+                "appId": key_info["app_id"],
+                "timestamp": str(timestamp),
+                "signature": signature,
+                "Content-Type": form_data.content_type
+            }
+            
+            response = requests.post(url, data=form_data, headers=headers)
+            return response.json()
         
-        fields = {
-            "fileName": file_name,
-            "query": text,
-            "language": language,
-            "search": str(search)
-        }
-        
-        if file_url:
-            fields["fileUrl"] = file_url
-        elif file_path:
-            fields["file"] = (file_path, open(file_path, 'rb'), 'application/octet-stream')
-        else:
-            raise ValueError("file_url 或 file_path 必须提供其中一个")
-        
-        form_data = MultipartEncoder(fields=fields)
-        
-        headers = {
-            "appId": self.app_id,
-            "timestamp": str(timestamp),
-            "signature": signature,
-            "Content-Type": form_data.content_type
-        }
-        
-        response = requests.post(url, data=form_data, headers=headers)
-        return response.json()
+        return self._make_request_with_retry(_request)
     
     def create_ppt_by_outline(self, text: str, outline: dict, template_id: str,
                              author: str = "XXXX", is_card_note: bool = True,
                              search: bool = False, is_figure: bool = True,
                              ai_image: str = "normal") -> dict:
         """根据大纲创建PPT - 使用直接创建方式（绕过API bug）"""
-        
-        # 由于createPptByOutline接口存在99999系统异常问题
-        # 改用create接口，将大纲信息融合到query文本中
-        
-        # 将大纲转换为文本描述
-        outline_text = f"标题：{outline.get('title', text)}\n"
-        if outline.get('subTitle'):
-            outline_text += f"副标题：{outline['subTitle']}\n"
-        
-        outline_text += "\n内容要点：\n"
-        for i, chapter in enumerate(outline.get('chapters', []), 1):
-            chapter_title = chapter.get('chapterTitle', f'第{i}部分')
-            outline_text += f"{i}. {chapter_title}\n"
+        def _request(key_info):
+            # 由于createPptByOutline接口存在99999系统异常问题
+            # 改用create接口，将大纲信息融合到query文本中
             
-            # 处理章节内容
-            contents = chapter.get('contents', [])
-            if isinstance(contents, list):
-                for content in contents:
-                    if isinstance(content, str):
-                        outline_text += f"   - {content}\n"
-                    elif isinstance(content, dict) and 'chapterTitle' in content:
-                        outline_text += f"   - {content['chapterTitle']}\n"
-        
-        # 构建完整的查询文本
-        full_query = f"{text}\n\n{outline_text}"
-        
-        # 使用create接口（已知可以工作）
-        url = f"{self.base_url}/create"
-        timestamp = int(time.time())
-        signature = self._get_signature(timestamp)
-        
-        form_data = MultipartEncoder(
-            fields={
-                "query": full_query,
-                "templateId": template_id,
-                "author": author,
-                "isCardNote": str(is_card_note),
-                "search": str(search),
-                "isFigure": str(is_figure),
-                "aiImage": ai_image
+            # 将大纲转换为文本描述
+            outline_text = f"标题：{outline.get('title', text)}\n"
+            if outline.get('subTitle'):
+                outline_text += f"副标题：{outline['subTitle']}\n"
+            
+            outline_text += "\n内容要点：\n"
+            for i, chapter in enumerate(outline.get('chapters', []), 1):
+                chapter_title = chapter.get('chapterTitle', f'第{i}部分')
+                outline_text += f"{i}. {chapter_title}\n"
+                
+                # 处理章节内容
+                contents = chapter.get('contents', [])
+                if isinstance(contents, list):
+                    for content in contents:
+                        if isinstance(content, str):
+                            outline_text += f"   - {content}\n"
+                        elif isinstance(content, dict) and 'chapterTitle' in content:
+                            outline_text += f"   - {content['chapterTitle']}\n"
+            
+            # 构建完整的查询文本
+            full_query = f"{text}\n\n{outline_text}"
+            
+            # 使用create接口（已知可以工作）
+            url = f"{self.base_url}/create"
+            timestamp = int(time.time())
+            signature = self._get_signature(key_info["app_id"], key_info["api_secret"], timestamp)
+            
+            form_data = MultipartEncoder(
+                fields={
+                    "query": full_query,
+                    "templateId": template_id,
+                    "author": author,
+                    "isCardNote": str(is_card_note),
+                    "search": str(search),
+                    "isFigure": str(is_figure),
+                    "aiImage": ai_image
+                }
+            )
+            
+            headers = {
+                "appId": key_info["app_id"],
+                "timestamp": str(timestamp),
+                "signature": signature,
+                "Content-Type": form_data.content_type
             }
-        )
+            
+            response = requests.post(url, data=form_data, headers=headers)
+            result = response.json()
+            
+            # 添加调试信息
+            if result.get('code') != 0:
+                print(f"DEBUG - 使用直接创建方式的详细信息:")
+                print(f"  模板ID: {template_id}")
+                print(f"  查询文本长度: {len(full_query)}")
+                print(f"  使用密钥: {key_info.get('name', 'unnamed')}")
+                print(f"  响应: {result}")
+            
+            return result
         
-        headers = {
-            "appId": self.app_id,
-            "timestamp": str(timestamp),
-            "signature": signature,
-            "Content-Type": form_data.content_type
-        }
-        
-        response = requests.post(url, data=form_data, headers=headers)
-        result = response.json()
-        
-        # 添加调试信息
-        if result.get('code') != 0:
-            print(f"DEBUG - 使用直接创建方式的详细信息:")
-            print(f"  模板ID: {template_id}")
-            print(f"  查询文本长度: {len(full_query)}")
-            print(f"  响应: {result}")
-        
-        return result
+        return self._make_request_with_retry(_request)
 
 # 创建MCP服务器
 server = Server("pptmcpseriver")
@@ -549,6 +721,15 @@ async def handle_list_tools() -> list[Tool]:
                 },
                 "required": ["topic"]
             }
+        ),
+        Tool(
+            name="get_api_pool_stats",
+            description="获取API密钥池状态统计。使用说明：1. 显示当前密钥池中所有密钥的使用情况。2. 包含并发数、请求数、错误率等信息。3. 用于监控和调试API调用性能。4. 无需参数，直接调用即可。",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False
+            }
         )
     ]
 
@@ -582,6 +763,11 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[types.Text
         elif name == "create_ppt_by_outline":
             result = aippt_client.create_ppt_by_outline(**arguments)
             return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        
+        elif name == "get_api_pool_stats":
+            # 获取密钥池统计信息
+            stats = aippt_client.get_pool_stats()
+            return [types.TextContent(type="text", text=json.dumps(stats, ensure_ascii=False, indent=2))]
         
         elif name == "create_full_ppt_workflow":
             # ReACT模式完整工作流实现
@@ -1270,9 +1456,9 @@ def main():
         epilog="""
 使用示例:
   python main.py stdio                    # 使用stdio传输（默认）
-  python main.py http                     # 使用HTTP传输，默认端口8000
-  python main.py sse                      # 使用SSE传输，默认端口8001
-  python main.py http-stream              # 使用HTTP Stream传输，默认端口8002
+  python main.py http                     # 使用HTTP传输，默认端口50
+  python main.py sse                      # 使用SSE传输，默认端口60
+  python main.py http-stream              # 使用HTTP Stream传输，默认端口70
   python main.py http --port 8080         # 使用HTTP传输，自定义端口
   python main.py sse --port 8002          # 使用SSE传输，自定义端口
   python main.py http-stream --port 8003  # 使用HTTP Stream传输，自定义端口
@@ -1298,7 +1484,7 @@ def main():
         "--port",
         type=int,
         default=None,
-        help="服务器端口 (HTTP默认: 8000, SSE默认: 8001, HTTP-Stream默认: 8002)"
+        help="服务器端口 (HTTP默认: 50, SSE默认: 60, HTTP-Stream默认: 70)"
     )
     
     parser.add_argument(
@@ -1313,11 +1499,11 @@ def main():
     # 设置默认端口
     if args.port is None:
         if args.transport == "http":
-            args.port = 8000
+            args.port = 50
         elif args.transport == "sse":
-            args.port = 8001
+            args.port = 60
         elif args.transport == "http-stream":
-            args.port = 8002
+            args.port = 70
         else:
             args.port = 0  # stdio不需要端口
     
@@ -1334,22 +1520,22 @@ def main():
         asyncio.run(run_stdio_server())
     
     elif args.transport == "http":
-        logger.info(f"启动 HTTP 传输服务器 - http://{args.host}:{args.port}/mcp")
-        print(f"服务器启动: http://{args.host}:{args.port}/mcp")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 HTTP 传输服务器 - http://{}:{}/mcp".format(args.host, args.port))
+        print("服务器启动: http://{}:{}/mcp".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         asyncio.run(run_http_server(args.host, args.port))
     
     elif args.transport == "sse":
-        logger.info(f"启动 SSE 传输服务器 - http://{args.host}:{args.port}/sse")
-        print(f"SSE服务器启动: http://{args.host}:{args.port}/sse")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 SSE 传输服务器 - http://{}:{}/sse".format(args.host, args.port))
+        print("SSE服务器启动: http://{}:{}/sse".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         print("支持Server-Sent Events实时通信")
         asyncio.run(run_sse_server(args.host, args.port))
     
     elif args.transport == "http-stream":
-        logger.info(f"启动 HTTP Stream 传输服务器 - http://{args.host}:{args.port}/mcp")
-        print(f"HTTP Stream服务器启动: http://{args.host}:{args.port}/mcp")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 HTTP Stream 传输服务器 - http://{}:{}/mcp".format(args.host, args.port))
+        print("HTTP Stream服务器启动: http://{}:{}/mcp".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         print("支持MCP 2025-03-26 HTTP Stream Transport")
         asyncio.run(run_http_stream_server(args.host, args.port))
 

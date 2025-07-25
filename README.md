@@ -445,6 +445,7 @@ curl http://localhost:62/
 ## 🔗 相关链接
 
 - [MCP官方文档](https://github.com/microsoft/mcp)
+- [讯飞开放平台](https://www.xfyun.cn/)
 - [讯飞智文API](https://zwapi.xfyun.cn/)
 - [UV官方文档](https://docs.astral.sh/uv/)
 

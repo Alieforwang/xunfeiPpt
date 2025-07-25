@@ -124,7 +124,7 @@ API_KEY_POOL = [
 
 ## 🔑 获取API密钥
 
-1. 访问 [讯飞智文开放平台](https://zwapi.xfyun.cn/)
+1. 访问 [讯飞开放平台](https://www.xfyun.cn/)
 2. 注册并登录账号
 3. 创建应用获取 APP ID 和 API Secret
 4. 将密钥信息填入配置中

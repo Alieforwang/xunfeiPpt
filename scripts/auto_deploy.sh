@@ -418,20 +418,11 @@ fix_python_compatibility() {
     if [ -f "$main_file" ]; then
         log_info "检查Python代码兼容性..."
         
-        # 创建备份
-        cp "$main_file" "${main_file}.backup"
-        
-        # 修复f-string为.format()以兼容旧版本Python
-        sed -i 's/f"\([^"]*\){\([^}]*\)}\([^"]*\)"/"\1{}".format(\2)/g' "$main_file"
-        sed -i "s/f'\([^']*\){\([^}]*\)}\([^']*\)'/"\1{}".format(\2)/g" "$main_file"
-        
-        # 测试语法
+        # Python 3.13+支持所有现代语法，只需验证语法正确性
         if $PYTHON_CMD -m py_compile "$main_file"; then
             log_success "Python代码语法检查通过"
-            rm -f "${main_file}.backup"
         else
-            log_error "Python代码语法检查失败，恢复备份"
-            mv "${main_file}.backup" "$main_file"
+            log_error "Python代码语法检查失败"
             return 1
         fi
     fi

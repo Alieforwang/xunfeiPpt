@@ -23,22 +23,33 @@ cd "$WORK_DIR"
 if command -v python3 >/dev/null 2>&1; then
     PYTHON_CMD="python3"
     PIP_CMD="pip3"
+    PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
 elif command -v python >/dev/null 2>&1; then
     PYTHON_CMD="python"
     PIP_CMD="pip"
+    PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
 else
     echo "错误: 未找到Python"
     exit 1
 fi
 
 echo "Python: $PYTHON_CMD"
-$PYTHON_CMD --version
+echo "版本: $PYTHON_VERSION"
+
+# 检查Python版本是否支持uv（需要3.8+）
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
 
 # 安装依赖
 echo "安装依赖..."
-if command -v uv >/dev/null 2>&1; then
+if command -v uv >/dev/null 2>&1 && [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+    echo "使用uv安装依赖..."
     uv pip install mcp requests requests-toolbelt starlette uvicorn
 else
+    if command -v uv >/dev/null 2>&1; then
+        echo "⚠️ Python版本($PYTHON_VERSION)低于3.8，使用pip而非uv"
+    fi
+    echo "使用pip安装依赖..."
     $PIP_CMD install mcp requests requests-toolbelt starlette uvicorn
 fi
 

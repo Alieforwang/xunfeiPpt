@@ -92,13 +92,15 @@ fix_file_encoding() {
 setup_python_environment() {
     log_info "检测Python环境..."
     
-    # 检测Python命令
+    # 检测Python命令和版本
     if command -v python3 >/dev/null 2>&1; then
         PYTHON_CMD="python3"
         PIP_CMD="pip3"
+        PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
     elif command -v python >/dev/null 2>&1; then
-        PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1)
-        if [ "$PYTHON_VERSION" = "3" ]; then
+        PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
+        PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+        if [ "$PYTHON_MAJOR" = "3" ]; then
             PYTHON_CMD="python"
             PIP_CMD="pip"
         else
@@ -112,15 +114,23 @@ setup_python_environment() {
     fi
     
     log_success "Python命令: $PYTHON_CMD"
-    $PYTHON_CMD --version
+    log_info "Python版本: $PYTHON_VERSION"
     
-    # 检测包管理器
-    if command -v uv >/dev/null 2>&1; then
+    # 检查Python版本是否支持uv（需要3.8+）
+    PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
+    PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+    
+    # 检测包管理器 - 根据Python版本智能选择
+    if command -v uv >/dev/null 2>&1 && [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
         PACKAGE_MANAGER="uv"
-        log_success "检测到uv包管理器"
+        log_success "检测到uv包管理器，Python版本支持"
     else
         PACKAGE_MANAGER="pip"
-        log_info "使用pip包管理器"
+        if command -v uv >/dev/null 2>&1; then
+            log_warning "检测到uv，但Python版本($PYTHON_VERSION)低于3.8，使用pip"
+        else
+            log_info "使用pip包管理器"
+        fi
     fi
 }
 

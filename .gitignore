@@ -71,6 +71,8 @@ Thumbs.db
 *.pid
 service.log
 service.pid
+service_*.log
+service_*.pid
 
 # Temporary files
 *.tmp
@@ -78,9 +80,12 @@ service.pid
 *.bak
 *.backup
 
-# API keys and secrets (keep this commented out since we have example keys)
+# API keys and secrets (IMPORTANT: Protect sensitive information)
 # .env
 # config.json
+# api_keys.json
+# secrets.json
+# 注意：如果创建了包含真实API密钥的配置文件，请确保将其添加到.gitignore
 
 # Service files that get copied during deployment
 /www/wwwroot/xunfeiPpt/

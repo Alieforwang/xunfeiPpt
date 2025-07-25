@@ -1,255 +1,451 @@
 # 部署指南
 
-本指南提供了讯飞智文PPT生成服务的完整部署说明。
+本指南提供了讯飞智文PPT生成服务的完整部署说明，现已支持三协议同时启动模式。
 
 ## 🚀 快速开始
 
-### 专用uv环境部署（推荐）
+### 方案1：UV专用自动部署（推荐新用户）
 
 使用专门的uv环境自动化部署脚本：
 
 ```bash
-# 基本部署
+# 1. 基本部署（生成三协议服务管理器）
 bash uv_deploy.sh
 
-# 自定义配置
-bash uv_deploy.sh --host 127.0.0.1 --port 8080 --protocol http-stream
+# 2. 启动所有三种协议服务
+./service_manager.sh start
+
+# 3. 验证部署
+./service_manager.sh status
 ```
 
-详细使用说明请参考：[uv部署指南](../UV_DEPLOY_README.md)
+### 方案2：开箱即用部署（推荐服务器）
 
-### 手动部署
+直接使用独立的三协议服务管理器：
+
+```bash
+# 1. 下载服务管理器
+wget https://raw.githubusercontent.com/your-repo/pptMcpSeriver/main/service_manager.sh
+chmod +x service_manager.sh
+
+# 2. 确保uv环境（如果没有）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 3. 启动所有服务（HTTP:60, SSE:61, HTTP-STREAM:62）
+./service_manager.sh start
+```
+
+### 方案3：手动部署（开发调试）
 
 如果需要手动部署：
 
 ```bash
-# 1. 安装uv
+# 1. 安装uv和Python 3.13+
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. 安装Python 3.13+
 uv python install 3.13
-uv python pin 3.13
 
-# 3. 同步依赖
+# 2. 同步依赖
 uv sync
 
-# 4. 启动服务
-uv run python main.py http-stream --host 0.0.0.0 --port 60
+# 3. 启动单个服务（调试用）
+uv run python main.py http --host 0.0.0.0 --port 60
 ```
 
-## 📋 脚本说明
+## 📋 核心特性
 
-### uv专用部署脚本
+### 🌟 三协议同时启动
 
-- **`uv_deploy.sh`** - 专用uv环境自动化部署脚本（推荐）
-  - 按照MCP和uv官网标准配置
-  - 支持参数化配置 (host/port/protocol)
-  - 自动生成服务管理脚本
-  - 完整的服务生命周期管理
+现在可以同时启动三种传输协议：
 
-### 服务管理
+- **HTTP** (端口60): RESTful API接口
+- **SSE** (端口61): Server-Sent Events实时通信  
+- **HTTP Stream** (端口62): MCP 2025-03-26标准协议
 
-部署后会生成 `service_manager.sh` 脚本：
-- 启动/停止/重启/状态查看
-- 日志管理和进程监控
-- PID文件管理
+### 🔧 服务管理特性
 
-## 🔧 跨平台支持
+- **独立脚本**: service_manager.sh不依赖配置文件
+- **PID管理**: 每个协议独立的进程ID管理
+- **日志分离**: 各协议独立的日志文件
+- **环境变量**: HOST/PORT灵活配置
+- **状态监控**: 完整的服务状态检查
 
-### uv环境管理
+## 🛠️ 部署方案对比
 
-部署脚本基于uv进行环境管理：
+| 特性 | uv_deploy.sh | service_manager.sh | 手动部署 |
+|------|--------------|-------------------|----------|
+| **UV环境管理** | ✅ 专用安装 | ✅ 使用现有 | ⚠️ 手动配置 |
+| **三协议同启** | ✅ 自动生成 | ✅ 开箱即用 | ❌ 不支持 |
+| **配置文件** | ✅ 自动生成 | ❌ 无需配置 | ⚠️ 手动配置 |
+| **错误处理** | ✅ 完整验证 | ✅ 智能检测 | ⚠️ 基础处理 |
+| **进程管理** | ✅ PID文件 | ✅ PID文件 | ❌ 无管理 |
+| **服务监控** | ✅ 状态检查 | ✅ 详细状态 | ❌ 无监控 |
+| **适用场景** | 首次部署 | 服务器运维 | 开发调试 |
 
-- **自动安装**: uv和Python 3.13+环境
-- **标准配置**: 按照uv官网标准配置项目
-- **依赖管理**: 使用`uv sync`管理依赖
-- **虚拟环境**: 自动创建和管理虚拟环境
+## 📁 部署后目录结构
 
-### 系统支持
+```
+pptMcpSeriver/
+├── main.py                     # 主服务文件
+├── service_manager.sh          # 🌟 三协议服务管理器
+├── service_http.pid            # HTTP服务PID文件
+├── service_sse.pid             # SSE服务PID文件  
+├── service_stream.pid          # HTTP-STREAM服务PID文件
+├── service_http.log            # HTTP服务日志
+├── service_sse.log             # SSE服务日志
+├── service_stream.log          # HTTP-STREAM服务日志
+├── pyproject.toml              # 项目配置
+├── uv.lock                     # 依赖锁定
+└── ...                         # 其他文件
+```
 
-- **Linux**: 所有主要发行版
-- **macOS**: 完整支持
-- **Windows**: WSL/Git Bash/MSYS2支持
+## 🚀 详细部署步骤
 
-## 🛠️ 手动部署步骤
-
-如果需要完全手动部署：
-
-### 1. 环境准备
+### 步骤1：环境准备
 
 ```bash
-# 安装uv
+# 检查系统环境
+uname -a                    # 查看系统信息
+python3 --version          # 检查Python版本
+
+# 安装uv（如果没有）
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 重新加载PATH
-export PATH="$HOME/.cargo/bin:$PATH"
+source $HOME/.cargo/env    # 重新加载环境变量
 ```
 
-### 2. Python环境
+### 步骤2：获取项目
 
 ```bash
-# 安装Python 3.13+
-uv python install 3.13
+# 方案A：完整项目部署
+git clone <repository-url>
+cd pptMcpSeriver
+bash uv_deploy.sh
 
-# 设置项目Python版本
-uv python pin 3.13
+# 方案B：仅服务管理器
+wget https://raw.githubusercontent.com/your-repo/pptMcpSeriver/main/service_manager.sh
+chmod +x service_manager.sh
 ```
 
-### 3. 项目初始化
+### 步骤3：启动服务
 
 ```bash
-# 确保有pyproject.toml文件
-# 如果没有，会自动创建
+# 启动所有三种协议服务
+./service_manager.sh start
 
-# 同步依赖
-uv sync
+# 查看启动状态
+./service_manager.sh status
 ```
 
-### 4. 启动服务
+### 步骤4：验证部署
 
 ```bash
-# 直接启动
-uv run python main.py http-stream --host 0.0.0.0 --port 60
+# 检查端口监听
+sudo netstat -tlnp | grep -E ":(60|61|62)\s"
 
-# 后台启动
-nohup uv run python main.py http-stream --host 0.0.0.0 --port 60 > service.log 2>&1 &
+# 访问三个协议端点
+curl http://localhost:60/    # HTTP状态页面
+curl http://localhost:61/    # SSE状态页面  
+curl http://localhost:62/    # HTTP-STREAM状态页面
+
+# 测试API调用
+curl -X POST http://localhost:60/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
 ```
 
-## 🔍 故障排除
+## 🔧 服务管理
 
-### 常见问题
+### 基本管理命令
 
-#### 1. Python版本问题
-
-**症状**: 项目要求Python 3.13+
-**解决方案**:
 ```bash
-# 检查Python版本
-python3.13 --version
+# 启动所有服务
+./service_manager.sh start
 
-# 如果没有Python 3.13，使用uv安装
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv python install 3.13
+# 停止所有服务
+./service_manager.sh stop
+
+# 重启所有服务
+./service_manager.sh restart
+
+# 查看详细状态
+./service_manager.sh status
 ```
 
-#### 2. 依赖验证失败
+### 日志管理
 
-**症状**: 依赖包无法正确导入
-**解决方案**:
 ```bash
-# 使用正确的Python环境安装依赖
-uv pip install --python python3.13 mcp requests requests-toolbelt starlette uvicorn
+# 查看所有服务日志
+./service_manager.sh logs
+
+# 查看特定服务日志
+./service_manager.sh logs http     # HTTP服务
+./service_manager.sh logs sse      # SSE服务
+./service_manager.sh logs stream   # HTTP-STREAM服务
+
+# 实时查看日志
+./service_manager.sh logs http -f
 ```
 
-#### 3. systemd服务启动失败
-
-**症状**: 服务配置错误或Python路径不正确
-**解决方案**:
-```bash
-# 使用修复脚本
-bash fix_deployment.sh
-
-# 或手动检查systemd配置
-sudo systemctl status ppt-mcp-sse
-journalctl -u ppt-mcp-sse -n 20
-```
-
-#### 4. 端口被占用
-
-**症状**: 端口60已被使用
-**解决方案**:
-```bash
-# 检查端口占用
-sudo netstat -tlnp | grep 60
-sudo ss -tlnp | grep 60
-
-# 停止占用端口的进程或更换端口
-python3.13 main.py sse --host 0.0.0.0 --port 8060
-```
-
-### 服务管理
-
-#### 使用生成的服务管理脚本
+### 环境变量配置
 
 ```bash
-# 使用自动生成的服务管理脚本
-./service_manager.sh start    # 启动服务
-./service_manager.sh stop     # 停止服务
-./service_manager.sh restart  # 重启服务
-./service_manager.sh status   # 查看状态
-./service_manager.sh logs     # 查看日志
-./service_manager.sh logs -f  # 实时日志
+# 自定义绑定地址
+HOST=0.0.0.0 ./service_manager.sh start
+
+# 自定义基础端口（会自动分配+1, +2）
+PORT=8080 ./service_manager.sh start
+# 启动: HTTP(8080), SSE(8081), HTTP-STREAM(8082)
+
+# 组合配置
+HOST=127.0.0.1 PORT=9000 ./service_manager.sh start
 ```
 
 ## 🌐 网络配置
 
 ### 防火墙设置
 
-#### Linux (firewalld)
 ```bash
-sudo firewall-cmd --permanent --add-port=60/tcp
+# Linux (firewalld) - 开放三协议端口
+sudo firewall-cmd --permanent --add-port=60-62/tcp
 sudo firewall-cmd --reload
+
+# Linux (ufw) - 开放端口范围
+sudo ufw allow 60:62/tcp
+
+# 检查防火墙状态
+sudo firewall-cmd --list-ports    # firewalld
+sudo ufw status                   # ufw
 ```
 
-#### Linux (ufw)
-```bash
-sudo ufw allow 60
-```
+### 端口规划
+
+| 服务类型 | 默认端口 | 自定义示例 | 说明 |
+|----------|----------|------------|------|
+| HTTP | 60 | PORT=8080 → 8080 | 基础端口 |
+| SSE | 61 | PORT=8080 → 8081 | 基础端口+1 |
+| HTTP-STREAM | 62 | PORT=8080 → 8082 | 基础端口+2 |
 
 ### 访问地址
 
-部署成功后，可通过以下地址访问服务：
+部署成功后的访问地址：
 
-- **本地访问**: http://localhost:60
-- **局域网访问**: http://内网IP:60
-- **公网访问**: http://公网IP:60 (需配置防火墙)
+```bash
+# 本地访问
+http://localhost:60/     # HTTP服务状态页面
+http://localhost:61/     # SSE服务状态页面
+http://localhost:62/     # HTTP-STREAM服务状态页面
 
-### 状态页面
+# API端点
+http://localhost:60/mcp           # HTTP API
+http://localhost:61/sse           # SSE连接
+http://localhost:61/messages/     # SSE消息
+http://localhost:62/mcp           # HTTP-STREAM API
+```
 
-访问根路径可看到服务状态页面：
-- 服务运行状态
-- 可用工具列表
-- SSE连接测试
-- 使用说明
+## 🔍 故障排除
+
+### 常见问题与解决方案
+
+#### 1. 服务启动失败
+
+**症状**: 部分或全部服务启动失败
+
+```bash
+# 诊断步骤
+./service_manager.sh logs        # 查看错误日志
+./service_manager.sh status      # 检查服务状态
+
+# 常见原因与解决
+# 原因1：端口被占用
+sudo netstat -tlnp | grep -E ":(60|61|62)\s"
+PORT=8080 ./service_manager.sh start
+
+# 原因2：uv环境问题
+uv --version
+uv sync
+
+# 原因3：Python版本不匹配
+uv python install 3.13
+```
+
+#### 2. API调用失败
+
+**症状**: curl请求返回错误或超时
+
+```bash
+# 检查服务是否运行
+./service_manager.sh status
+
+# 检查端口监听
+sudo ss -tlnp | grep -E ":(60|61|62)\s"
+
+# 测试本地连接
+telnet localhost 60
+telnet localhost 61  
+telnet localhost 62
+```
+
+#### 3. 日志文件权限问题
+
+**症状**: 无法写入日志文件
+
+```bash
+# 检查文件权限
+ls -la service_*.log service_*.pid
+
+# 修复权限
+chmod 644 service_*.log
+chmod 644 service_*.pid
+chown $(whoami):$(whoami) service_*.*
+```
+
+#### 4. 内存或CPU占用过高
+
+**症状**: 服务占用资源过多
+
+```bash
+# 查看进程资源占用
+ps aux | grep "python.*main.py"
+top -p $(cat service_http.pid),$(cat service_sse.pid),$(cat service_stream.pid)
+
+# 重启服务释放资源
+./service_manager.sh restart
+```
+
+### 诊断工具
+
+```bash
+# 系统环境检查
+uv --version                     # 检查uv版本
+uv python list                   # 查看可用Python版本
+uv sync --dry-run               # 检查依赖状态
+
+# 网络连接测试
+curl -I http://localhost:60/     # HTTP连接测试
+curl -I http://localhost:61/     # SSE连接测试
+curl -I http://localhost:62/     # HTTP-STREAM连接测试
+
+# 服务功能测试
+cd tests
+python test_api_pool.py          # API密钥池测试
+python test_sse.py              # SSE传输测试
+```
 
 ## 🔄 更新和维护
 
-### 更新服务
+### 服务更新
 
 ```bash
-# 停止服务
+# 1. 停止所有服务
 ./service_manager.sh stop
 
-# 更新代码
+# 2. 更新代码
 git pull origin main
 
-# 同步依赖
+# 3. 同步依赖
 uv sync
 
-# 重启服务
+# 4. 重启服务
+./service_manager.sh start
+
+# 5. 验证更新
+./service_manager.sh status
+```
+
+### 配置更新
+
+```bash
+# 更新API密钥池配置
+# 编辑 main.py 中的 API_KEY_POOL
+
+# 重启服务应用配置
+./service_manager.sh restart
+```
+
+### 备份和恢复
+
+```bash
+# 创建备份
+tar -czf ppt-mcp-backup-$(date +%Y%m%d-%H%M%S).tar.gz \
+  main.py service_manager.sh pyproject.toml uv.lock \
+  service_*.log service_*.pid
+
+# 恢复备份
+tar -xzf ppt-mcp-backup-*.tar.gz
 ./service_manager.sh start
 ```
 
-### 备份配置
+## 🚦 健康检查
+
+### 服务监控脚本
 
 ```bash
-# 备份工作目录
-tar -czf ppt-mcp-backup-$(date +%Y%m%d).tar.gz ./
+#!/bin/bash
+# health_check.sh - 服务健康检查脚本
+
+check_service() {
+    local service_name=$1
+    local port=$2
+    
+    if curl -f -s "http://localhost:$port/" > /dev/null; then
+        echo "✅ $service_name (端口$port) - 正常"
+    else
+        echo "❌ $service_name (端口$port) - 异常"
+        return 1
+    fi
+}
+
+echo "=== PPT MCP服务健康检查 ==="
+check_service "HTTP" 60
+check_service "SSE" 61  
+check_service "HTTP-STREAM" 62
+```
+
+### 自动重启配置
+
+```bash
+# 添加到crontab实现自动监控重启
+# crontab -e
+*/5 * * * * /path/to/pptMcpSeriver/health_check.sh || /path/to/pptMcpSeriver/service_manager.sh restart
 ```
 
 ## 📞 技术支持
 
-如果遇到部署问题：
+### 获取帮助的优先级
 
-1. 查看[使用指南](./USAGE.md)了解基本功能
-2. 检查系统兼容性和Python版本
-3. 查看错误日志和运行诊断
-4. 使用修复脚本解决常见问题
-5. 提交GitHub Issue获取帮助
+1. **查看日志**: `./service_manager.sh logs`
+2. **检查状态**: `./service_manager.sh status`  
+3. **运行诊断**: 使用tests目录下的测试脚本
+4. **查看文档**: 参考相关文档链接
+5. **提交Issue**: GitHub Issue提供详细信息
 
-## 相关文档
+### 提交Issue时需要的信息
 
-- [使用指南](./USAGE.md) - 完整的功能使用说明
-- [HTTP Stream指南](./HTTP_STREAM_GUIDE.md) - 新的传输协议说明
-- [API密钥池指南](./API_KEY_POOL_GUIDE.md) - 多密钥配置说明
-- [脚本说明](../scripts/README.md) - 详细的脚本使用说明
+```bash
+# 收集系统信息
+echo "=== 系统信息 ==="
+uname -a
+python3 --version
+uv --version
+
+echo "=== 服务状态 ==="
+./service_manager.sh status
+
+echo "=== 服务日志 ==="
+./service_manager.sh logs | tail -50
+
+echo "=== 端口监听 ==="
+sudo netstat -tlnp | grep -E ":(60|61|62)\s"
+```
+
+## 📚 相关文档
+
+- **[主文档](../README.md)** - 项目总览和快速开始
+- **[使用指南](./USAGE.md)** - 完整功能使用说明
+- **[服务管理指南](./SERVICE_GUIDE.md)** - 详细服务管理说明
+- **[HTTP Stream指南](./HTTP_STREAM_GUIDE.md)** - HTTP Stream协议说明
+- **[API密钥池指南](./API_KEY_POOL_GUIDE.md)** - 多密钥配置说明
+- **[UV部署指南](../UV_DEPLOY_README.md)** - uv专用脚本说明
+
+---
+
+**🌟 新特性**: 支持三协议同时启动，一次部署即可同时提供HTTP、SSE和HTTP-STREAM三种访问方式！

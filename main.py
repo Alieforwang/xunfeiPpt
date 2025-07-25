@@ -30,22 +30,23 @@ from mcp.types import (
 import mcp.types as types
 
 # 讯飞智文API密钥池配置
+# 请在此处配置您的讯飞智文API密钥
 API_KEY_POOL = [
     {
-        "app_id": "your_app_id_1",
-        "api_secret": "your_api_secret_2",
+        "app_id": "your_app_id_here",
+        "api_secret": "your_api_secret_here",
         "name": "主密钥",
         "max_concurrent": 10,  # 最大并发数
         "enabled": True
     },
-    # 可以添加更多密钥
-    {
-        "app_id": "8767f4a7",
-        "api_secret": "MDU0OTBlMzEwYjBiNDI3MDM3ODI2ZTZi", 
-        "name": "备用密钥1",
-        "max_concurrent":2,
-        "enabled": True
-    },
+    # 可以添加更多密钥实现负载均衡
+    # {
+    #     "app_id": "your_app_id_2",
+    #     "api_secret": "your_api_secret_2",
+    #     "name": "备用密钥1",
+    #     "max_concurrent": 5,
+    #     "enabled": True
+    # },
     # {
     #     "app_id": "your_app_id_3",
     #     "api_secret": "your_api_secret_3",

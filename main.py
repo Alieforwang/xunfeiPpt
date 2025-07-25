@@ -39,13 +39,13 @@ API_KEY_POOL = [
         "enabled": True
     },
     # 可以添加更多密钥
-    # {
-    #     "app_id": "your_app_id_2",
-    #     "api_secret": "your_api_secret_2", 
-    #     "name": "备用密钥1",
-    #     "max_concurrent": 5,
-    #     "enabled": True
-    # },
+    {
+        "app_id": "8767f4a7",
+        "api_secret": "MDU0OTBlMzEwYjBiNDI3MDM3ODI2ZTZi", 
+        "name": "备用密钥1",
+        "max_concurrent":2,
+        "enabled": True
+    },
     # {
     #     "app_id": "your_app_id_3",
     #     "api_secret": "your_api_secret_3",
@@ -1456,9 +1456,9 @@ def main():
         epilog="""
 使用示例:
   python main.py stdio                    # 使用stdio传输（默认）
-  python main.py http                     # 使用HTTP传输，默认端口8000
-  python main.py sse                      # 使用SSE传输，默认端口8001
-  python main.py http-stream              # 使用HTTP Stream传输，默认端口8002
+  python main.py http                     # 使用HTTP传输，默认端口50
+  python main.py sse                      # 使用SSE传输，默认端口60
+  python main.py http-stream              # 使用HTTP Stream传输，默认端口70
   python main.py http --port 8080         # 使用HTTP传输，自定义端口
   python main.py sse --port 8002          # 使用SSE传输，自定义端口
   python main.py http-stream --port 8003  # 使用HTTP Stream传输，自定义端口
@@ -1484,7 +1484,7 @@ def main():
         "--port",
         type=int,
         default=None,
-        help="服务器端口 (HTTP默认: 8000, SSE默认: 8001, HTTP-Stream默认: 8002)"
+        help="服务器端口 (HTTP默认: 50, SSE默认: 60, HTTP-Stream默认: 70)"
     )
     
     parser.add_argument(
@@ -1499,11 +1499,11 @@ def main():
     # 设置默认端口
     if args.port is None:
         if args.transport == "http":
-            args.port = 8000
+            args.port = 50
         elif args.transport == "sse":
-            args.port = 8001
+            args.port = 60
         elif args.transport == "http-stream":
-            args.port = 8002
+            args.port = 70
         else:
             args.port = 0  # stdio不需要端口
     
@@ -1520,22 +1520,22 @@ def main():
         asyncio.run(run_stdio_server())
     
     elif args.transport == "http":
-        logger.info(f"启动 HTTP 传输服务器 - http://{args.host}:{args.port}/mcp")
-        print(f"服务器启动: http://{args.host}:{args.port}/mcp")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 HTTP 传输服务器 - http://{}:{}/mcp".format(args.host, args.port))
+        print("服务器启动: http://{}:{}/mcp".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         asyncio.run(run_http_server(args.host, args.port))
     
     elif args.transport == "sse":
-        logger.info(f"启动 SSE 传输服务器 - http://{args.host}:{args.port}/sse")
-        print(f"SSE服务器启动: http://{args.host}:{args.port}/sse")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 SSE 传输服务器 - http://{}:{}/sse".format(args.host, args.port))
+        print("SSE服务器启动: http://{}:{}/sse".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         print("支持Server-Sent Events实时通信")
         asyncio.run(run_sse_server(args.host, args.port))
     
     elif args.transport == "http-stream":
-        logger.info(f"启动 HTTP Stream 传输服务器 - http://{args.host}:{args.port}/mcp")
-        print(f"HTTP Stream服务器启动: http://{args.host}:{args.port}/mcp")
-        print(f"状态页面: http://{args.host}:{args.port}/")
+        logger.info("启动 HTTP Stream 传输服务器 - http://{}:{}/mcp".format(args.host, args.port))
+        print("HTTP Stream服务器启动: http://{}:{}/mcp".format(args.host, args.port))
+        print("状态页面: http://{}:{}/".format(args.host, args.port))
         print("支持MCP 2025-03-26 HTTP Stream Transport")
         asyncio.run(run_http_stream_server(args.host, args.port))
 

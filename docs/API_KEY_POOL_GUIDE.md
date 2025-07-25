@@ -19,25 +19,25 @@
 - **错误统计**：记录每个密钥的成功率
 - **智能降级**：优先使用成功率高的密钥
 
-## ⚙️ 配置方法
+## 📋 配置方法
 
-### 1. 基础配置
+### 方法1：直接修改main.py（推荐）
 
-在 `main.py` 中找到 `API_KEY_POOL` 配置：
+在 `main.py` 文件中找到 `API_KEY_POOL` 配置节，将占位符替换为您的真实密钥：
 
 ```python
 API_KEY_POOL = [
     {
-        "app_id": "2dc9dc12",
-        "api_secret": "YWVmZjQ0NTI4MjkxMTEzMTA5MWZiY2M4",
+        "app_id": "your_app_id_here",        # 替换为您的APP ID
+        "api_secret": "your_api_secret_here", # 替换为您的API Secret
         "name": "主密钥",
         "max_concurrent": 10,  # 最大并发数
         "enabled": True
     },
-    # 添加更多密钥
+    # 可以添加更多密钥实现负载均衡
     {
         "app_id": "your_app_id_2",
-        "api_secret": "your_api_secret_2", 
+        "api_secret": "your_api_secret_2",
         "name": "备用密钥1",
         "max_concurrent": 5,
         "enabled": True
@@ -52,7 +52,38 @@ API_KEY_POOL = [
 ]
 ```
 
-### 2. 参数说明
+### 方法2：使用环境变量（推荐生产环境）
+
+创建 `.env` 文件（已在.gitignore中），设置环境变量：
+
+```bash
+# .env 文件示例
+AIPPT_APP_ID_1=your_app_id_here
+AIPPT_API_SECRET_1=your_api_secret_here
+AIPPT_APP_ID_2=your_app_id_2
+AIPPT_API_SECRET_2=your_api_secret_2
+```
+
+然后修改main.py读取环境变量：
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEY_POOL = [
+    {
+        "app_id": os.getenv("AIPPT_APP_ID_1", "your_app_id_here"),
+        "api_secret": os.getenv("AIPPT_API_SECRET_1", "your_api_secret_here"),
+        "name": "主密钥",
+        "max_concurrent": 10,
+        "enabled": True
+    }
+]
+```
+
+### 参数说明
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -62,7 +93,7 @@ API_KEY_POOL = [
 | `max_concurrent` | int | ⭐ | 最大并发请求数，默认10 |
 | `enabled` | bool | ⭐ | 是否启用此密钥，默认true |
 
-### 3. 高级配置示例
+### 高级配置示例
 
 ```python
 # 针对不同场景的密钥配置
@@ -91,13 +122,43 @@ API_KEY_POOL = [
 ]
 ```
 
+## 🔑 获取API密钥
+
+1. 访问 [讯飞智文开放平台](https://zwapi.xfyun.cn/)
+2. 注册并登录账号
+3. 创建应用获取 APP ID 和 API Secret
+4. 将密钥信息填入配置中
+
+## 🛡️ 安全注意事项
+
+### 重要安全规则
+
+1. **不要将真实密钥提交到代码仓库**
+2. 使用环境变量或配置文件存储敏感信息
+3. 确保 `.env` 文件已添加到 `.gitignore`
+4. 定期轮换API密钥
+5. 设置合理的并发限制
+
+### 安全配置建议
+
+```bash
+# 创建独立的配置文件
+echo "your_app_id" > .app_id
+echo "your_api_secret" > .api_secret
+chmod 600 .app_id .api_secret
+
+# 在.gitignore中添加
+echo ".app_id" >> .gitignore
+echo ".api_secret" >> .gitignore
+```
+
 ## 📊 监控和调试
 
-### 1. 使用MCP工具监控
+### 使用MCP工具监控
 
 ```bash
 # 通过MCP调用查看密钥池状态
-curl -X POST http://localhost:8002/mcp \
+curl -X POST http://localhost:60/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -110,7 +171,7 @@ curl -X POST http://localhost:8002/mcp \
   }'
 ```
 
-### 2. 状态信息说明
+### 状态信息说明
 
 返回的统计信息包含：
 
@@ -135,7 +196,7 @@ curl -X POST http://localhost:8002/mcp \
 }
 ```
 
-### 3. 运行测试
+### 运行测试
 
 ```bash
 # 运行密钥池功能测试
@@ -145,13 +206,13 @@ python test_api_pool.py
 
 ## 🚀 性能优化建议
 
-### 1. 并发配置
+### 并发配置
 
 - **主密钥**：设置较高的 `max_concurrent`（15-20）
 - **备用密钥**：设置中等的 `max_concurrent`（5-10）
 - **测试密钥**：设置较低的 `max_concurrent`（1-3）
 
-### 2. 密钥分层
+### 密钥分层
 
 ```python
 # 推荐的分层配置
@@ -169,7 +230,7 @@ API_KEY_POOL = [
 ]
 ```
 
-### 3. 监控指标
+### 监控指标
 
 关注以下关键指标：
 - **错误率**：应保持在5%以下
@@ -178,7 +239,7 @@ API_KEY_POOL = [
 
 ## 🔧 故障排除
 
-### 1. 常见问题
+### 常见问题
 
 **密钥无效**
 ```
@@ -198,7 +259,7 @@ API_KEY_POOL = [
 解决: 检查网络连接，考虑增加重试次数
 ```
 
-### 2. 调试技巧
+### 调试技巧
 
 **启用详细日志**
 ```python
@@ -223,19 +284,21 @@ for key in stats['key_info']:
 
 ## 📋 最佳实践
 
-### 1. 密钥管理
+### 密钥管理
 - ✅ 使用描述性的密钥名称
 - ✅ 定期检查密钥有效性
 - ✅ 为不同环境配置不同密钥池
+- ✅ 使用环境变量保护敏感信息
 - ❌ 不要在生产环境使用测试密钥
+- ❌ 不要将真实密钥提交到代码仓库
 
-### 2. 并发设置
+### 并发设置
 - ✅ 根据实际需求设置并发限制
 - ✅ 为高优先级任务预留容量
 - ✅ 监控并发使用情况
 - ❌ 不要设置过高的并发导致API限制
 
-### 3. 容错设计
+### 容错设计
 - ✅ 配置多个备用密钥
 - ✅ 设置适当的重试次数
 - ✅ 监控错误率和成功率
@@ -243,7 +306,7 @@ for key in stats['key_info']:
 
 ## 🔄 从单密钥迁移
 
-### 1. 渐进式迁移
+### 渐进式迁移
 
 ```python
 # 第一步：保持原有配置
@@ -270,11 +333,15 @@ API_KEY_POOL.append({
 # 根据监控数据调整并发限制
 ```
 
-### 2. 兼容性保证
+### 兼容性保证
 
 - 现有代码无需修改
 - API调用接口保持不变
 - 向后完全兼容
 - 可随时回退到单密钥模式
+
+---
+
+**⚠️ 重要提醒**: 请妥善保管您的API密钥，不要在公开场合分享或提交到代码仓库。
 
 通过合理的密钥池配置，可以显著提高PPT生成服务的并发能力和稳定性！

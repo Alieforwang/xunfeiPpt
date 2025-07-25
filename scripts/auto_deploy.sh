@@ -127,12 +127,12 @@ detect_conda_environment() {
             CONDA_PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
             log_info "conda Python版本: $CONDA_PYTHON_VERSION"
             
-            # 检查是否为Python 3.8+
+            # 检查是否为Python 3.13+
             CONDA_PYTHON_MAJOR=$(echo $CONDA_PYTHON_VERSION | cut -d'.' -f1)
             CONDA_PYTHON_MINOR=$(echo $CONDA_PYTHON_VERSION | cut -d'.' -f2)
             
-            if [ "$CONDA_PYTHON_MAJOR" -eq 3 ] && [ "$CONDA_PYTHON_MINOR" -ge 8 ]; then
-                log_success "conda Python版本满足要求(3.8+)"
+            if [ "$CONDA_PYTHON_MAJOR" -eq 3 ] && [ "$CONDA_PYTHON_MINOR" -ge 13 ]; then
+                log_success "conda Python版本满足要求(3.13+)"
                 PYTHON_CMD="python"
                 PIP_CMD="pip"
                 PYTHON_VERSION="$CONDA_PYTHON_VERSION"
@@ -140,7 +140,7 @@ detect_conda_environment() {
                 PYTHON_SOURCE="conda"
                 return 0
             else
-                log_warning "conda Python版本($CONDA_PYTHON_VERSION)低于3.8"
+                log_warning "conda Python版本($CONDA_PYTHON_VERSION)低于3.13"
             fi
         fi
     else
@@ -153,7 +153,7 @@ detect_existing_python() {
     log_info "检测系统Python环境..."
     
     # 按优先级检测Python命令
-    for python_cmd in python3.11 python3.10 python3.9 python3.8 python3 python; do
+    for python_cmd in python3.13 python3.12 python3.11 python3.10 python3.9 python3.8 python3 python; do
         if command -v "$python_cmd" >/dev/null 2>&1; then
             DETECTED_PYTHON_VERSION=$("$python_cmd" --version 2>&1 | cut -d' ' -f2)
             DETECTED_PYTHON_MAJOR=$(echo $DETECTED_PYTHON_VERSION | cut -d'.' -f1)
@@ -163,7 +163,7 @@ detect_existing_python() {
             
             # 检查是否为Python 3.x
             if [ "$DETECTED_PYTHON_MAJOR" -eq 3 ]; then
-                if [ "$DETECTED_PYTHON_MINOR" -ge 8 ]; then
+                if [ "$DETECTED_PYTHON_MINOR" -ge 13 ]; then
                     log_success "找到合适的Python版本: $DETECTED_PYTHON_VERSION"
                     PYTHON_CMD="$python_cmd"
                     PYTHON_VERSION="$DETECTED_PYTHON_VERSION"
@@ -178,7 +178,7 @@ detect_existing_python() {
                     fi
                     return 0
                 else
-                    log_warning "Python版本($DETECTED_PYTHON_VERSION)低于3.8"
+                    log_warning "Python版本($DETECTED_PYTHON_VERSION)低于3.13"
                 fi
             else
                 log_warning "发现Python 2.x版本，跳过"
@@ -186,7 +186,7 @@ detect_existing_python() {
         fi
     done
     
-    log_warning "未找到合适的Python 3.8+环境"
+    log_warning "未找到合适的Python 3.13+环境"
     PYTHON_VERSION_OK="false"
 }
 
@@ -198,18 +198,18 @@ install_python_with_uv() {
     fi
     
     if command -v uv >/dev/null 2>&1; then
-        log_info "使用uv安装Python 3.11..."
+        log_info "使用uv安装Python 3.13..."
         
-        # 尝试安装Python 3.11
-        if uv python install 3.11; then
-            log_success "Python 3.11安装成功"
+        # 尝试安装Python 3.13
+        if uv python install 3.13; then
+            log_success "Python 3.13安装成功"
             
             # 验证安装的Python
-            if uv python pin 3.11; then
-                log_success "Python 3.11已设置为项目默认版本"
+            if uv python pin 3.13; then
+                log_success "Python 3.13已设置为项目默认版本"
                 PYTHON_CMD="uv run python"
                 PIP_CMD="uv pip"
-                PYTHON_VERSION="3.11"
+                PYTHON_VERSION="3.13"
                 PYTHON_VERSION_OK="true"
                 PYTHON_SOURCE="uv"
                 return 0
@@ -222,8 +222,8 @@ install_python_with_uv() {
     # 如果uv安装失败，提供安装建议
     if [ "$PYTHON_VERSION_OK" != "true" ]; then
         log_error "无法自动安装合适的Python环境"
-        log_info "请手动安装Python 3.8+，或者："
-        echo "  - 使用conda: conda install python=3.11"
+        log_info "请手动安装Python 3.13+，或者："
+        echo "  - 使用conda: conda install python=3.13"
         echo "  - 使用系统包管理器: yum install python3 或 apt install python3"
         echo "  - 从源码编译: https://www.python.org/downloads/"
         exit 1

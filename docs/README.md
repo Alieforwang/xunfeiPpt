@@ -12,8 +12,22 @@
   - 集成配置示例
   - 故障排除指南
 
+### 📦 部署指南
+- [`DEPLOYMENT_GUIDE.md`](./DEPLOYMENT_GUIDE.md) - **部署指南**
+  - 自动部署脚本使用
+  - 跨平台部署支持
+  - 手动部署步骤
+  - 故障排除和修复
+
+### 🛠️ 服务管理
+- [`SERVICE_GUIDE.md`](./SERVICE_GUIDE.md) - **服务管理指南**
+  - systemd服务配置
+  - 服务管理命令
+  - 日志查看和监控
+  - 配置修改说明
+
 ### 🔑 API密钥池
-- [`API_KEY_POOL_GUIDE.md`](./API_KEY_POOL_GUIDE.md) - **🆕 API密钥池配置指南**
+- [`API_KEY_POOL_GUIDE.md`](./API_KEY_POOL_GUIDE.md) - **API密钥池配置指南**
   - 多密钥配置方法
   - 并发控制和负载均衡
   - 故障转移机制
@@ -43,9 +57,10 @@
 ## 🎯 快速导航
 
 ### 新用户入门
-1. [使用说明](./USAGE.md#快速开始) - 了解基本功能
-2. [协议选择](./USAGE.md#协议对比) - 选择合适的传输协议
-3. [集成配置](./USAGE.md#集成指南) - 配置你的应用
+1. [部署指南](./DEPLOYMENT_GUIDE.md#快速开始) - 快速部署服务
+2. [使用说明](./USAGE.md#快速开始) - 了解基本功能  
+3. [协议选择](./USAGE.md#协议对比) - 选择合适的传输协议
+4. [集成配置](./USAGE.md#集成指南) - 配置你的应用
 
 ### ReACT工作流
 1. [ReACT模式详解](./USAGE.md#react工作流详解) - 理解工作流原理
@@ -58,9 +73,10 @@
 3. [迁移指南](./HTTP_STREAM_GUIDE.md#迁移指南) - 从SSE迁移
 
 ### 问题解决
-1. [常见问题](./USAGE.md#注意事项) - 基础问题排查
-2. [SSE问题](./SSE_ISSUE_ANALYSIS.md#solutions-implemented) - SSE相关问题
-3. [故障排除](./HTTP_STREAM_GUIDE.md#故障排除) - HTTP Stream问题
+1. [部署问题](./DEPLOYMENT_GUIDE.md#故障排除) - 部署相关问题排查
+2. [服务管理](./SERVICE_GUIDE.md#故障排除) - systemd服务问题
+3. [SSE问题](./SSE_ISSUE_ANALYSIS.md#solutions-implemented) - SSE相关问题
+4. [HTTP Stream问题](./HTTP_STREAM_GUIDE.md#故障排除) - HTTP Stream问题
 
 ## 🔗 文档关联
 
@@ -93,16 +109,19 @@
 ```
 docs/
 ├── USAGE.md                              # 主要使用指南
+├── DEPLOYMENT_GUIDE.md                   # 部署指南
+├── SERVICE_GUIDE.md                      # 服务管理指南
 ├── HTTP_STREAM_GUIDE.md                  # HTTP Stream专题
 ├── HTTP_STREAM_IMPLEMENTATION_REPORT.md  # 技术实现报告  
 ├── SSE_ISSUE_ANALYSIS.md                 # 问题分析报告
-└── README.md                             # 本文档目录
+├── API_KEY_POOL_GUIDE.md                 # API密钥池指南
+└── README.md                             # 文档目录（本文件）
 ```
 
 ## 🔍 搜索指南
 
 ### 按问题类型搜索
-- **安装配置** → [USAGE.md](./USAGE.md#快速开始)
+- **安装配置** → [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#手动部署步骤)
 - **协议选择** → [USAGE.md](./USAGE.md#协议对比)
 - **API错误** → [SSE_ISSUE_ANALYSIS.md](./SSE_ISSUE_ANALYSIS.md)
 - **连接问题** → [HTTP_STREAM_GUIDE.md](./HTTP_STREAM_GUIDE.md#故障排除)

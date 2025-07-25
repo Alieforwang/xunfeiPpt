@@ -1,6 +1,6 @@
 # 讯飞智文PPT生成服务 - MCP Server
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://github.com/microsoft/mcp)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -8,20 +8,11 @@
 
 ## 🚀 快速开始
 
-### 一键部署（推荐）
+### 一键自动部署（推荐）
 
 ```bash
-# 下载并运行自动部署脚本
-curl -o auto_deploy.sh https://your-server/scripts/auto_deploy.sh
-bash auto_deploy.sh
-```
-
-### 简化部署（适合测试）
-
-```bash
-# 下载并运行简化部署脚本
-curl -o quick_deploy.sh https://your-server/scripts/quick_deploy.sh
-bash quick_deploy.sh
+# 运行自动部署脚本（支持跨平台）
+bash scripts/auto_deploy.sh
 ```
 
 ### 手动部署
@@ -31,12 +22,43 @@ bash quick_deploy.sh
 git clone <repository-url>
 cd pptMcpSeriver
 
-# 2. 安装依赖
-pip install -r requirements.txt
+# 2. 安装依赖（需要Python 3.13+）
+uv sync
+# 或者使用 pip install mcp requests requests-toolbelt starlette uvicorn
 
 # 3. 启动服务
-python main.py sse --host 0.0.0.0 --port 60
+python main.py http-stream --host 0.0.0.0 --port 60
 ```
+
+## 📚 完整文档
+
+- **[使用指南](./docs/USAGE.md)** - 完整的功能使用说明
+- **[部署指南](./docs/DEPLOYMENT_GUIDE.md)** - 详细的部署说明和故障排除
+- **[服务管理](./docs/SERVICE_GUIDE.md)** - systemd服务管理指南
+- **[HTTP Stream指南](./docs/HTTP_STREAM_GUIDE.md)** - 新的传输协议说明
+- **[API密钥池](./docs/API_KEY_POOL_GUIDE.md)** - 多密钥配置指南
+
+## ⚡ 核心特性
+
+### 🎯 PPT生成功能
+- 智能PPT模板选择
+- 自动内容大纲生成
+- 文档转PPT功能
+- 完整的ReACT工作流
+- 任务进度追踪
+
+### 🌐 传输协议支持
+- **stdio** - 标准输入输出（Claude Desktop集成）
+- **http** - HTTP协议（Web应用集成）
+- **http-stream** - HTTP Stream Transport（推荐，MCP 2025-03-26）
+- **sse** - Server-Sent Events（已废弃，兼容性支持）
+
+### 🔧 部署特性
+- 跨平台自动部署 (Linux/macOS/Windows)
+- Python 3.13+ 环境自动安装
+- uv/pip 包管理器智能选择
+- systemd 服务自动配置 (Linux)
+- 智能文件编码转换
 
 ## 📁 项目结构
 

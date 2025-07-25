@@ -17,7 +17,16 @@ fi
 SERVICE_NAME="ppt-mcp-sse"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 WORK_DIR="/www/wwwroot/xunfeiPpt"
-PYTHON_PATH="/root/miniconda3/bin/python"
+
+# 读取Python环境配置
+if [ -f "$WORK_DIR/.python_env" ]; then
+    source "$WORK_DIR/.python_env"
+    echo "使用检测到的Python环境: $PYTHON_CMD (来源: $PYTHON_SOURCE)"
+else
+    echo "警告: 未找到Python环境配置，使用默认配置"
+    PYTHON_CMD="python3"
+    PYTHON_SOURCE="system"
+fi
 
 echo "检查工作目录..."
 if [ ! -d "$WORK_DIR" ]; then
@@ -32,13 +41,44 @@ if [ ! -f "$WORK_DIR/main.py" ]; then
 fi
 
 echo "检查Python环境..."
-if [ ! -f "$PYTHON_PATH" ]; then
-    echo "错误: Python路径 $PYTHON_PATH 不存在"
-    echo "请修改脚本中的PYTHON_PATH变量"
-    exit 1
-fi
+# 验证Python命令是否可用
+case "$PYTHON_SOURCE" in
+    "uv")
+        if ! command -v uv >/dev/null 2>&1; then
+            echo "错误: uv命令不可用"
+            exit 1
+        fi
+        ;;
+    *)
+        if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+            echo "错误: Python命令 $PYTHON_CMD 不可用"
+            exit 1
+        fi
+        ;;
+esac
 
 echo "创建systemd服务文件..."
+
+# 根据Python环境设置启动命令和环境变量
+case "$PYTHON_SOURCE" in
+    "uv")
+        EXEC_START_CMD="uv run python main.py sse --host 0.0.0.0 --port 60"
+        ENVIRONMENT_PATH="Environment=PATH=$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ;;
+    "conda")
+        EXEC_START_CMD="$PYTHON_CMD main.py sse --host 0.0.0.0 --port 60"
+        if [ -n "$CONDA_PREFIX" ]; then
+            ENVIRONMENT_PATH="Environment=PATH=$CONDA_PREFIX/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        else
+            ENVIRONMENT_PATH="Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        fi
+        ;;
+    *)
+        EXEC_START_CMD="$PYTHON_CMD main.py sse --host 0.0.0.0 --port 60"
+        ENVIRONMENT_PATH="Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ;;
+esac
+
 cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=讯飞智文PPT生成服务MCP Server - SSE传输
@@ -50,8 +90,8 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$WORK_DIR
-Environment=PATH=/root/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=$PYTHON_PATH main.py sse --host 0.0.0.0 --port 60
+$ENVIRONMENT_PATH
+ExecStart=$EXEC_START_CMD
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10

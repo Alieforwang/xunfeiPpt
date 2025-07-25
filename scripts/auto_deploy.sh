@@ -361,6 +361,9 @@ verify_dependencies() {
     local test_cmd
     if [ "$PYTHON_SOURCE" = "uv" ]; then
         test_cmd="uv run python -c"
+    elif [ "$PACKAGE_MANAGER" = "uv" ]; then
+        # 使用uv包管理器但非uv Python环境
+        test_cmd="uv run --python $PYTHON_CMD python -c"
     else
         test_cmd="$PYTHON_CMD -c"
     fi

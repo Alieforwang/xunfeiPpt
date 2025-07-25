@@ -26,7 +26,7 @@ bash uv_deploy.sh
 
 ```bash
 # 下载最新服务管理器
-wget https://raw.githubusercontent.com/your-repo/pptMcpSeriver/main/service_manager.sh
+wget https://raw.githubusercontent.com/Alieforwang/xunfeiPpt/main/service_manager.sh
 chmod +x service_manager.sh
 
 # 启动所有服务（HTTP端口60，SSE端口61，HTTP-STREAM端口62）
@@ -37,8 +37,8 @@ chmod +x service_manager.sh
 
 ```bash
 # 1. 克隆项目
-git clone <repository-url>
-cd pptMcpSeriver
+git clone https://github.com/Alieforwang/xunfeiPpt.git
+cd xunfeiPpt
 
 # 2. 安装uv和Python 3.13+
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -152,8 +152,8 @@ pptMcpSeriver/
 #### 方案1：UV专用部署（推荐新用户）
 ```bash
 # 1. 克隆项目
-git clone <repository-url>
-cd pptMcpSeriver
+git clone https://github.com/Alieforwang/xunfeiPpt.git
+cd xunfeiPpt
 
 # 2. 运行UV部署脚本
 bash uv_deploy.sh

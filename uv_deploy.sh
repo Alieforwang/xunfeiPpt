@@ -85,16 +85,30 @@ show_help() {
 
 选项:
     --host HOST         绑定的主机地址 (默认: $DEFAULT_HOST)
-    --port PORT         服务端口 (默认: $DEFAULT_PORT)
-    --protocol PROTOCOL 传输协议 (默认: $DEFAULT_PROTOCOL)
-                       可选: stdio, http, sse, http-stream
+                       服务器部署建议使用 0.0.0.0 以支持外部访问
+    --port PORT         基础服务端口 (默认: $DEFAULT_PORT)
+                       实际端口分配:
+                         HTTP: PORT
+                         SSE: PORT+1  
+                         HTTP-STREAM: PORT+2
     --work-dir DIR      工作目录 (默认: 当前目录)
     -h, --help         显示此帮助信息
 
+三种协议说明:
+    HTTP              标准HTTP协议，适用于一般客户端
+    SSE               Server-Sent Events，适用于实时推送
+    HTTP-STREAM       HTTP流式传输，适用于大数据传输
+
 示例:
-    $0                                    # 使用默认配置
-    $0 --port 8080 --host 127.0.0.1     # 自定义端口和主机
-    $0 --protocol sse --port 60          # 使用SSE协议
+    $0                                    # 使用默认配置 (0.0.0.0:60-62)
+    $0 --port 8080 --host 127.0.0.1     # 本地开发环境
+    $0 --host 0.0.0.0 --port 60         # 服务器部署，支持外部访问
+    $0 --host 192.168.1.100 --port 3000 # 指定IP和端口
+
+服务器部署注意事项:
+    - 使用 --host 0.0.0.0 允许外部访问
+    - 确保防火墙开放相应端口范围
+    - 建议使用标准端口避免冲突
 
 EOF
 }
@@ -240,8 +254,12 @@ create_service_manager() {
 
 SERVICE_NAME="ppt-mcp-server"
 WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PID_FILE="$WORK_DIR/service.pid"
-LOG_FILE="$WORK_DIR/service.log"
+PID_FILE_HTTP="$WORK_DIR/service_http.pid"
+PID_FILE_SSE="$WORK_DIR/service_sse.pid"
+PID_FILE_STREAM="$WORK_DIR/service_stream.pid"
+LOG_FILE_HTTP="$WORK_DIR/service_http.log"
+LOG_FILE_SSE="$WORK_DIR/service_sse.log"
+LOG_FILE_STREAM="$WORK_DIR/service_stream.log"
 
 # 读取配置
 if [ -f "$WORK_DIR/.service_config" ]; then
@@ -252,65 +270,196 @@ else
     PROTOCOL="http-stream"
 fi
 
-# 启动服务
+# 启动所有三种协议服务
 start_service() {
-    if [ -f "$PID_FILE" ] && ps -p $(cat "$PID_FILE") > /dev/null 2>&1; then
-        echo "服务已在运行 (PID: $(cat "$PID_FILE"))"
-        return 0
+    local any_running=false
+    
+    # 检查是否有服务正在运行
+    if [ -f "$PID_FILE_HTTP" ] && ps -p $(cat "$PID_FILE_HTTP") > /dev/null 2>&1; then
+        echo "HTTP服务已在运行 (PID: $(cat "$PID_FILE_HTTP"))"
+        any_running=true
+    fi
+    if [ -f "$PID_FILE_SSE" ] && ps -p $(cat "$PID_FILE_SSE") > /dev/null 2>&1; then
+        echo "SSE服务已在运行 (PID: $(cat "$PID_FILE_SSE"))"
+        any_running=true
+    fi
+    if [ -f "$PID_FILE_STREAM" ] && ps -p $(cat "$PID_FILE_STREAM") > /dev/null 2>&1; then
+        echo "HTTP-STREAM服务已在运行 (PID: $(cat "$PID_FILE_STREAM"))"
+        any_running=true
     fi
     
-    echo "启动PPT MCP服务..."
-    echo "配置: $PROTOCOL://$HOST:$PORT"
+    if [ "$any_running" = true ]; then
+        echo "部分服务已在运行，跳过已运行的服务"
+    fi
+    
+    echo "启动PPT MCP服务 - 三种协议模式..."
     
     cd "$WORK_DIR"
-    nohup uv run python main.py "$PROTOCOL" --host "$HOST" --port "$PORT" > "$LOG_FILE" 2>&1 &
-    echo $! > "$PID_FILE"
     
-    sleep 2
-    if ps -p $(cat "$PID_FILE") > /dev/null 2>&1; then
-        echo "✅ 服务启动成功"
-        echo "PID: $(cat "$PID_FILE")"
-        echo "日志: $LOG_FILE"
-        echo "访问: http://$HOST:$PORT"
+    # 启动HTTP服务 (端口 60)
+    if [ ! -f "$PID_FILE_HTTP" ] || ! ps -p $(cat "$PID_FILE_HTTP") > /dev/null 2>&1; then
+        echo "启动HTTP服务: http://$HOST:$PORT"
+        nohup uv run python main.py http --host "$HOST" --port "$PORT" > "$LOG_FILE_HTTP" 2>&1 &
+        echo $! > "$PID_FILE_HTTP"
+        sleep 1
+    fi
+    
+    # 启动SSE服务 (端口 61)
+    local sse_port=$((PORT + 1))
+    if [ ! -f "$PID_FILE_SSE" ] || ! ps -p $(cat "$PID_FILE_SSE") > /dev/null 2>&1; then
+        echo "启动SSE服务: http://$HOST:$sse_port"
+        nohup uv run python main.py sse --host "$HOST" --port "$sse_port" > "$LOG_FILE_SSE" 2>&1 &
+        echo $! > "$PID_FILE_SSE"
+        sleep 1
+    fi
+    
+    # 启动HTTP-STREAM服务 (端口 62)
+    local stream_port=$((PORT + 2))
+    if [ ! -f "$PID_FILE_STREAM" ] || ! ps -p $(cat "$PID_FILE_STREAM") > /dev/null 2>&1; then
+        echo "启动HTTP-STREAM服务: http://$HOST:$stream_port"
+        nohup uv run python main.py http-stream --host "$HOST" --port "$stream_port" > "$LOG_FILE_STREAM" 2>&1 &
+        echo $! > "$PID_FILE_STREAM"
+        sleep 1
+    fi
+    
+    # 验证服务启动状态
+    local success_count=0
+    
+    if [ -f "$PID_FILE_HTTP" ] && ps -p $(cat "$PID_FILE_HTTP") > /dev/null 2>&1; then
+        echo "✅ HTTP服务启动成功 (PID: $(cat "$PID_FILE_HTTP"), 端口: $PORT)"
+        success_count=$((success_count + 1))
     else
-        echo "❌ 服务启动失败"
-        rm -f "$PID_FILE"
+        echo "❌ HTTP服务启动失败"
+        rm -f "$PID_FILE_HTTP"
+    fi
+    
+    if [ -f "$PID_FILE_SSE" ] && ps -p $(cat "$PID_FILE_SSE") > /dev/null 2>&1; then
+        echo "✅ SSE服务启动成功 (PID: $(cat "$PID_FILE_SSE"), 端口: $sse_port)"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ SSE服务启动失败"
+        rm -f "$PID_FILE_SSE"
+    fi
+    
+    if [ -f "$PID_FILE_STREAM" ] && ps -p $(cat "$PID_FILE_STREAM") > /dev/null 2>&1; then
+        echo "✅ HTTP-STREAM服务启动成功 (PID: $(cat "$PID_FILE_STREAM"), 端口: $stream_port)"
+        success_count=$((success_count + 1))
+    else
+        echo "❌ HTTP-STREAM服务启动失败"
+        rm -f "$PID_FILE_STREAM"
+    fi
+    
+    echo ""
+    echo "服务启动完成: $success_count/3 个服务成功启动"
+    if [ $success_count -eq 3 ]; then
+        echo "🎉 所有服务启动成功！"
+    elif [ $success_count -gt 0 ]; then
+        echo "⚠️  部分服务启动成功，请检查日志"
+    else
+        echo "❌ 所有服务启动失败"
         return 1
     fi
 }
 
-# 停止服务
+# 停止所有服务
 stop_service() {
-    if [ ! -f "$PID_FILE" ]; then
-        echo "服务未运行"
-        return 0
-    fi
+    local stopped_count=0
     
-    PID=$(cat "$PID_FILE")
-    if ps -p "$PID" > /dev/null 2>&1; then
-        echo "停止服务 (PID: $PID)..."
-        kill "$PID"
-        
-        # 等待进程结束
-        for i in {1..10}; do
-            if ! ps -p "$PID" > /dev/null 2>&1; then
-                break
-            fi
-            sleep 1
-        done
-        
-        # 强制杀死进程
+    # 停止HTTP服务
+    if [ -f "$PID_FILE_HTTP" ]; then
+        PID=$(cat "$PID_FILE_HTTP")
         if ps -p "$PID" > /dev/null 2>&1; then
-            echo "强制停止服务..."
-            kill -9 "$PID"
+            echo "停止HTTP服务 (PID: $PID)..."
+            kill "$PID"
+            
+            # 等待进程结束
+            for i in {1..10}; do
+                if ! ps -p "$PID" > /dev/null 2>&1; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # 强制杀死进程
+            if ps -p "$PID" > /dev/null 2>&1; then
+                echo "强制停止HTTP服务..."
+                kill -9 "$PID"
+            fi
+            
+            echo "✅ HTTP服务已停止"
+            stopped_count=$((stopped_count + 1))
+        else
+            echo "HTTP服务进程不存在"
         fi
-        
-        echo "✅ 服务已停止"
+        rm -f "$PID_FILE_HTTP"
     else
-        echo "服务进程不存在"
+        echo "HTTP服务未运行"
     fi
     
-    rm -f "$PID_FILE"
+    # 停止SSE服务
+    if [ -f "$PID_FILE_SSE" ]; then
+        PID=$(cat "$PID_FILE_SSE")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            echo "停止SSE服务 (PID: $PID)..."
+            kill "$PID"
+            
+            # 等待进程结束
+            for i in {1..10}; do
+                if ! ps -p "$PID" > /dev/null 2>&1; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # 强制杀死进程
+            if ps -p "$PID" > /dev/null 2>&1; then
+                echo "强制停止SSE服务..."
+                kill -9 "$PID"
+            fi
+            
+            echo "✅ SSE服务已停止"
+            stopped_count=$((stopped_count + 1))
+        else
+            echo "SSE服务进程不存在"
+        fi
+        rm -f "$PID_FILE_SSE"
+    else
+        echo "SSE服务未运行"
+    fi
+    
+    # 停止HTTP-STREAM服务
+    if [ -f "$PID_FILE_STREAM" ]; then
+        PID=$(cat "$PID_FILE_STREAM")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            echo "停止HTTP-STREAM服务 (PID: $PID)..."
+            kill "$PID"
+            
+            # 等待进程结束
+            for i in {1..10}; do
+                if ! ps -p "$PID" > /dev/null 2>&1; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # 强制杀死进程
+            if ps -p "$PID" > /dev/null 2>&1; then
+                echo "强制停止HTTP-STREAM服务..."
+                kill -9 "$PID"
+            fi
+            
+            echo "✅ HTTP-STREAM服务已停止"
+            stopped_count=$((stopped_count + 1))
+        else
+            echo "HTTP-STREAM服务进程不存在"
+        fi
+        rm -f "$PID_FILE_STREAM"
+    else
+        echo "HTTP-STREAM服务未运行"
+    fi
+    
+    echo ""
+    echo "服务停止完成: $stopped_count 个服务已停止"
 }
 
 # 重启服务
@@ -321,42 +470,165 @@ restart_service() {
     start_service
 }
 
-# 查看服务状态
+# 查看所有服务状态
 status_service() {
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
+    local running_count=0
+    
+    echo "=== 服务状态总览 ==="
+    
+    # HTTP服务状态
+    if [ -f "$PID_FILE_HTTP" ]; then
+        PID=$(cat "$PID_FILE_HTTP")
         if ps -p "$PID" > /dev/null 2>&1; then
-            echo "✅ 服务正在运行"
-            echo "PID: $PID"
-            echo "配置: $PROTOCOL://$HOST:$PORT"
-            echo "日志: $LOG_FILE"
-            echo "访问: http://$HOST:$PORT"
-            
-            # 显示进程信息
-            echo ""
-            echo "进程信息:"
-            ps -p "$PID" -o pid,ppid,start,time,cmd
+            echo "✅ HTTP服务正在运行"
+            echo "   PID: $PID"
+            echo "   端口: $PORT"
+            echo "   地址: http://$HOST:$PORT"
+            echo "   日志: $LOG_FILE_HTTP"
+            running_count=$((running_count + 1))
         else
-            echo "❌ 服务已停止 (PID文件存在但进程不存在)"
-            rm -f "$PID_FILE"
+            echo "❌ HTTP服务已停止 (PID文件存在但进程不存在)"
+            rm -f "$PID_FILE_HTTP"
         fi
     else
-        echo "❌ 服务未运行"
+        echo "❌ HTTP服务未运行"
+    fi
+    
+    echo ""
+    
+    # SSE服务状态
+    local sse_port=$((PORT + 1))
+    if [ -f "$PID_FILE_SSE" ]; then
+        PID=$(cat "$PID_FILE_SSE")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            echo "✅ SSE服务正在运行"
+            echo "   PID: $PID"
+            echo "   端口: $sse_port"
+            echo "   地址: http://$HOST:$sse_port"
+            echo "   日志: $LOG_FILE_SSE"
+            running_count=$((running_count + 1))
+        else
+            echo "❌ SSE服务已停止 (PID文件存在但进程不存在)"
+            rm -f "$PID_FILE_SSE"
+        fi
+    else
+        echo "❌ SSE服务未运行"
+    fi
+    
+    echo ""
+    
+    # HTTP-STREAM服务状态
+    local stream_port=$((PORT + 2))
+    if [ -f "$PID_FILE_STREAM" ]; then
+        PID=$(cat "$PID_FILE_STREAM")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            echo "✅ HTTP-STREAM服务正在运行"
+            echo "   PID: $PID"
+            echo "   端口: $stream_port"  
+            echo "   地址: http://$HOST:$stream_port"
+            echo "   日志: $LOG_FILE_STREAM"
+            running_count=$((running_count + 1))
+        else
+            echo "❌ HTTP-STREAM服务已停止 (PID文件存在但进程不存在)"
+            rm -f "$PID_FILE_STREAM"
+        fi
+    else
+        echo "❌ HTTP-STREAM服务未运行"
+    fi
+    
+    echo ""
+    echo "=== 总体状态 ==="
+    echo "运行中服务: $running_count/3"
+    
+    if [ $running_count -eq 3 ]; then
+        echo "🎉 所有服务正常运行"
+    elif [ $running_count -gt 0 ]; then
+        echo "⚠️  部分服务正在运行"
+    else
+        echo "❌ 所有服务已停止"
+    fi
+    
+    if [ $running_count -gt 0 ]; then
+        echo ""
+        echo "=== 进程详情 ==="
+        if [ -f "$PID_FILE_HTTP" ] && ps -p $(cat "$PID_FILE_HTTP") > /dev/null 2>&1; then
+            echo "HTTP服务进程:"
+            ps -p $(cat "$PID_FILE_HTTP") -o pid,ppid,start,time,cmd
+        fi
+        if [ -f "$PID_FILE_SSE" ] && ps -p $(cat "$PID_FILE_SSE") > /dev/null 2>&1; then
+            echo "SSE服务进程:"
+            ps -p $(cat "$PID_FILE_SSE") -o pid,ppid,start,time,cmd
+        fi
+        if [ -f "$PID_FILE_STREAM" ] && ps -p $(cat "$PID_FILE_STREAM") > /dev/null 2>&1; then
+            echo "HTTP-STREAM服务进程:"
+            ps -p $(cat "$PID_FILE_STREAM") -o pid,ppid,start,time,cmd
+        fi
     fi
 }
 
 # 查看日志
 logs_service() {
-    if [ -f "$LOG_FILE" ]; then
-        echo "=== 服务日志 ==="
-        if [ "$1" = "-f" ]; then
-            tail -f "$LOG_FILE"
-        else
-            tail -n 50 "$LOG_FILE"
-        fi
-    else
-        echo "日志文件不存在: $LOG_FILE"
-    fi
+    case "$1" in
+        http)
+            if [ -f "$LOG_FILE_HTTP" ]; then
+                echo "=== HTTP服务日志 ==="
+                if [ "$2" = "-f" ]; then
+                    tail -f "$LOG_FILE_HTTP"
+                else
+                    tail -n 50 "$LOG_FILE_HTTP"
+                fi
+            else
+                echo "HTTP服务日志文件不存在: $LOG_FILE_HTTP"
+            fi
+            ;;
+        sse)
+            if [ -f "$LOG_FILE_SSE" ]; then
+                echo "=== SSE服务日志 ==="
+                if [ "$2" = "-f" ]; then
+                    tail -f "$LOG_FILE_SSE"
+                else
+                    tail -n 50 "$LOG_FILE_SSE"
+                fi
+            else
+                echo "SSE服务日志文件不存在: $LOG_FILE_SSE"
+            fi
+            ;;
+        stream)
+            if [ -f "$LOG_FILE_STREAM" ]; then
+                echo "=== HTTP-STREAM服务日志 ==="
+                if [ "$2" = "-f" ]; then
+                    tail -f "$LOG_FILE_STREAM"
+                else
+                    tail -n 50 "$LOG_FILE_STREAM"
+                fi
+            else
+                echo "HTTP-STREAM服务日志文件不存在: $LOG_FILE_STREAM"
+            fi
+            ;;
+        *)
+            echo "=== 所有服务日志 ==="
+            echo ""
+            if [ -f "$LOG_FILE_HTTP" ]; then
+                echo "--- HTTP服务日志 (最近20行) ---"
+                tail -n 20 "$LOG_FILE_HTTP"
+                echo ""
+            fi
+            if [ -f "$LOG_FILE_SSE" ]; then
+                echo "--- SSE服务日志 (最近20行) ---"
+                tail -n 20 "$LOG_FILE_SSE"
+                echo ""
+            fi
+            if [ -f "$LOG_FILE_STREAM" ]; then
+                echo "--- HTTP-STREAM服务日志 (最近20行) ---"
+                tail -n 20 "$LOG_FILE_STREAM"
+                echo ""
+            fi
+            
+            if [ ! -f "$LOG_FILE_HTTP" ] && [ ! -f "$LOG_FILE_SSE" ] && [ ! -f "$LOG_FILE_STREAM" ]; then
+                echo "没有找到任何日志文件"
+            fi
+            ;;
+    esac
 }
 
 # 主命令处理
@@ -374,18 +646,26 @@ case "$1" in
         status_service
         ;;
     logs)
-        logs_service "$2"
+        logs_service "$2" "$3"
         ;;
     *)
-        echo "用法: $0 {start|stop|restart|status|logs [-f]}"
+        echo "用法: $0 {start|stop|restart|status|logs [http|sse|stream] [-f]}"
         echo ""
         echo "命令说明:"
-        echo "  start   - 启动服务"
-        echo "  stop    - 停止服务"
-        echo "  restart - 重启服务"
-        echo "  status  - 查看状态"
-        echo "  logs    - 查看日志"
-        echo "  logs -f - 实时查看日志"
+        echo "  start   - 启动所有三种协议服务"
+        echo "  stop    - 停止所有服务"
+        echo "  restart - 重启所有服务"
+        echo "  status  - 查看所有服务状态"
+        echo "  logs    - 查看所有服务日志"
+        echo "  logs http    - 查看HTTP服务日志"
+        echo "  logs sse     - 查看SSE服务日志"
+        echo "  logs stream  - 查看HTTP-STREAM服务日志"
+        echo "  logs [service] -f - 实时查看指定服务日志"
+        echo ""
+        echo "服务端口分配:"
+        echo "  HTTP: $PORT (默认60)"
+        echo "  SSE: $((PORT + 1)) (默认61)"
+        echo "  HTTP-STREAM: $((PORT + 2)) (默认62)"
         exit 1
         ;;
 esac
@@ -436,26 +716,45 @@ show_deployment_result() {
     echo "=== 部署完成 ==="
     echo ""
     log_success "工作目录: $WORK_DIR"
-    log_success "服务协议: $PROTOCOL"
-    log_success "绑定地址: $HOST:$PORT"
+    log_success "绑定地址: $HOST"
+    log_success "基础端口: $PORT"
+    echo ""
+    echo "=== 三种协议服务配置 ==="
+    echo "HTTP协议:        http://$HOST:$PORT"
+    echo "SSE协议:         http://$HOST:$((PORT + 1))"
+    echo "HTTP-STREAM协议: http://$HOST:$((PORT + 2))"
     echo ""
     echo "=== 服务管理 ==="
-    echo "启动服务: ./service_manager.sh start"
-    echo "停止服务: ./service_manager.sh stop"
-    echo "重启服务: ./service_manager.sh restart"
-    echo "查看状态: ./service_manager.sh status"
-    echo "查看日志: ./service_manager.sh logs"
-    echo "实时日志: ./service_manager.sh logs -f"
+    echo "启动所有服务: ./service_manager.sh start"
+    echo "停止所有服务: ./service_manager.sh stop"
+    echo "重启所有服务: ./service_manager.sh restart"
+    echo "查看服务状态: ./service_manager.sh status"
+    echo "查看所有日志: ./service_manager.sh logs"
+    echo "查看HTTP日志: ./service_manager.sh logs http"
+    echo "查看SSE日志:  ./service_manager.sh logs sse"
+    echo "查看STREAM日志: ./service_manager.sh logs stream"
+    echo "实时查看日志: ./service_manager.sh logs [服务类型] -f"
     echo ""
     echo "=== 访问地址 ==="
     if [ "$HOST" = "0.0.0.0" ]; then
-        echo "本地访问: http://localhost:$PORT"
-        echo "局域网访问: http://$(hostname -I | awk '{print $1}'):$PORT"
+        local_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+        echo "本地访问:"
+        echo "  HTTP:        http://localhost:$PORT"
+        echo "  SSE:         http://localhost:$((PORT + 1))"
+        echo "  HTTP-STREAM: http://localhost:$((PORT + 2))"
+        echo ""
+        echo "局域网访问:"
+        echo "  HTTP:        http://$local_ip:$PORT"
+        echo "  SSE:         http://$local_ip:$((PORT + 1))"
+        echo "  HTTP-STREAM: http://$local_ip:$((PORT + 2))"
     else
-        echo "访问地址: http://$HOST:$PORT"
+        echo "指定地址访问:"
+        echo "  HTTP:        http://$HOST:$PORT"
+        echo "  SSE:         http://$HOST:$((PORT + 1))"
+        echo "  HTTP-STREAM: http://$HOST:$((PORT + 2))"
     fi
     echo ""
-    log_success "部署完成！运行 './service_manager.sh start' 启动服务"
+    log_success "部署完成！运行 './service_manager.sh start' 启动所有三种协议服务"
 }
 
 # 主函数
@@ -464,7 +763,8 @@ main() {
     parse_arguments "$@"
     
     log_info "开始部署讯飞智文PPT服务..."
-    log_info "配置: $PROTOCOL://$HOST:$PORT"
+    log_info "绑定地址: $HOST"
+    log_info "基础端口: $PORT (HTTP:$PORT, SSE:$((PORT + 1)), HTTP-STREAM:$((PORT + 2)))"
     log_info "工作目录: $WORK_DIR"
     
     # 执行部署步骤

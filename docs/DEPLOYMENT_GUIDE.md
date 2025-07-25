@@ -4,95 +4,115 @@
 
 ## 🚀 快速开始
 
-### 方案一：自动部署脚本（推荐）
+### 专用uv环境部署（推荐）
 
-支持跨平台自动适配，包含完整的系统检测和服务管理：
+使用专门的uv环境自动化部署脚本：
 
 ```bash
-# 运行自动部署脚本
-bash scripts/auto_deploy.sh
+# 基本部署
+bash uv_deploy.sh
+
+# 自定义配置
+bash uv_deploy.sh --host 127.0.0.1 --port 8080 --protocol http-stream
 ```
 
-### 方案二：手动修复部署问题
+详细使用说明请参考：[uv部署指南](../UV_DEPLOY_README.md)
 
-如果自动部署遇到问题，可以使用修复脚本：
+### 手动部署
+
+如果需要手动部署：
 
 ```bash
-# 运行修复脚本
-bash fix_deployment.sh
+# 1. 安装uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. 安装Python 3.13+
+uv python install 3.13
+uv python pin 3.13
+
+# 3. 同步依赖
+uv sync
+
+# 4. 启动服务
+uv run python main.py http-stream --host 0.0.0.0 --port 60
 ```
 
 ## 📋 脚本说明
 
-### 部署脚本
+### uv专用部署脚本
 
-- **`scripts/auto_deploy.sh`** - 完整自动部署脚本（推荐生产环境）
-- **`scripts/quick_deploy.sh`** - 简化一键部署脚本（推荐测试环境）
-- **`scripts/deploy.sh`** - 原始部署脚本
-- **`fix_deployment.sh`** - 修复部署问题的临时脚本
+- **`uv_deploy.sh`** - 专用uv环境自动化部署脚本（推荐）
+  - 按照MCP和uv官网标准配置
+  - 支持参数化配置 (host/port/protocol)
+  - 自动生成服务管理脚本
+  - 完整的服务生命周期管理
 
-### 服务管理脚本
+### 服务管理
 
-- **`scripts/install_service.sh`** - systemd服务安装脚本（Linux）
-- **`scripts/uninstall_service.sh`** - systemd服务卸载脚本（Linux）
+部署后会生成 `service_manager.sh` 脚本：
+- 启动/停止/重启/状态查看
+- 日志管理和进程监控
+- PID文件管理
 
 ## 🔧 跨平台支持
 
-### 自动检测功能
+### uv环境管理
 
-部署脚本会自动检测以下系统环境：
+部署脚本基于uv进行环境管理：
 
-- **操作系统**: Linux, macOS, Windows (Cygwin/MSYS)
-- **Linux发行版**: Ubuntu, CentOS, Debian 等
-- **Python版本**: 优先Python 3.13+，支持自动安装
-- **包管理器**: 优先使用 uv，回退到 pip
-- **文件编码**: 自动转换 Windows CRLF 到 Unix LF
+- **自动安装**: uv和Python 3.13+环境
+- **标准配置**: 按照uv官网标准配置项目
+- **依赖管理**: 使用`uv sync`管理依赖
+- **虚拟环境**: 自动创建和管理虚拟环境
 
-### 系统特定配置
+### 系统支持
 
-| 系统 | 工作目录 | 服务管理 | 端口配置 |
-|------|----------|----------|----------|
-| Linux | `/www/wwwroot/xunfeiPpt` | systemd 或通用脚本 | 60 |
-| macOS | `~/xunfeiPpt` | 通用脚本 | 60 |
-| Windows | `/c/xunfeiPpt` | 通用脚本 | 60 |
+- **Linux**: 所有主要发行版
+- **macOS**: 完整支持
+- **Windows**: WSL/Git Bash/MSYS2支持
 
 ## 🛠️ 手动部署步骤
 
-如果自动部署遇到问题，可以按以下步骤手动部署：
+如果需要完全手动部署：
 
 ### 1. 环境准备
 
 ```bash
-# 创建工作目录
-mkdir -p /www/wwwroot/xunfeiPpt
-cd /www/wwwroot/xunfeiPpt
+# 安装uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 检查Python环境（需要Python 3.13+）
-python3.13 --version || python3 --version || python --version
+# 重新加载PATH
+export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-### 2. 安装依赖
+### 2. Python环境
 
 ```bash
-# 使用uv安装（推荐）
-uv pip install mcp requests requests-toolbelt starlette uvicorn
+# 安装Python 3.13+
+uv python install 3.13
 
-# 或使用pip安装
-pip3 install mcp requests requests-toolbelt starlette uvicorn
+# 设置项目Python版本
+uv python pin 3.13
 ```
 
-### 3. 复制main.py文件
+### 3. 项目初始化
 
-从项目根目录复制main.py到工作目录。
+```bash
+# 确保有pyproject.toml文件
+# 如果没有，会自动创建
+
+# 同步依赖
+uv sync
+```
 
 ### 4. 启动服务
 
 ```bash
 # 直接启动
-python3.13 main.py sse --host 0.0.0.0 --port 60
+uv run python main.py http-stream --host 0.0.0.0 --port 60
 
 # 后台启动
-nohup python3.13 main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+nohup uv run python main.py http-stream --host 0.0.0.0 --port 60 > service.log 2>&1 &
 ```
 
 ## 🔍 故障排除
@@ -149,29 +169,16 @@ python3.13 main.py sse --host 0.0.0.0 --port 8060
 
 ### 服务管理
 
-#### Linux systemd服务
+#### 使用生成的服务管理脚本
 
 ```bash
-# 查看服务状态
-systemctl status ppt-mcp-sse
-
-# 启动/停止/重启服务
-sudo systemctl start ppt-mcp-sse
-sudo systemctl stop ppt-mcp-sse
-sudo systemctl restart ppt-mcp-sse
-
-# 查看服务日志
-journalctl -u ppt-mcp-sse -f
-```
-
-#### 通用服务管理
-
-```bash
-# 使用服务管理脚本（自动部署时创建）
-bash service_manager.sh start
-bash service_manager.sh stop
-bash service_manager.sh restart
-bash service_manager.sh status
+# 使用自动生成的服务管理脚本
+./service_manager.sh start    # 启动服务
+./service_manager.sh stop     # 停止服务
+./service_manager.sh restart  # 重启服务
+./service_manager.sh status   # 查看状态
+./service_manager.sh logs     # 查看日志
+./service_manager.sh logs -f  # 实时日志
 ```
 
 ## 🌐 网络配置
@@ -211,20 +218,23 @@ sudo ufw allow 60
 
 ```bash
 # 停止服务
-bash service_manager.sh stop
+./service_manager.sh stop
 
 # 更新代码
 git pull origin main
 
+# 同步依赖
+uv sync
+
 # 重启服务
-bash service_manager.sh start
+./service_manager.sh start
 ```
 
 ### 备份配置
 
 ```bash
 # 备份工作目录
-tar -czf ppt-mcp-backup-$(date +%Y%m%d).tar.gz /www/wwwroot/xunfeiPpt
+tar -czf ppt-mcp-backup-$(date +%Y%m%d).tar.gz ./
 ```
 
 ## 📞 技术支持

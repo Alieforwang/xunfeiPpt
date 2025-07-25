@@ -437,6 +437,11 @@ curl http://localhost:62/
 
 本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
+## 📦 仓库地址
+
+- **GitHub**: [https://github.com/Alieforwang/xunfeiPpt.git](https://github.com/Alieforwang/xunfeiPpt.git)
+- **Gitee**: [https://gitee.com/xiao-wang-oh/xunfei-ppt.git](https://gitee.com/xiao-wang-oh/xunfei-ppt.git)
+
 ## 🔗 相关链接
 
 - [MCP官方文档](https://github.com/microsoft/mcp)

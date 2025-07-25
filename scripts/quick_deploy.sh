@@ -19,26 +19,97 @@ cd "$WORK_DIR"
 # 自动修复脚本编码
 [ -f "$0" ] && (file "$0" | grep -q "CRLF" && sed -i 's/\r$//' "$0" || true)
 
-# 检测Python
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON_CMD="python3"
-    PIP_CMD="pip3"
-elif command -v python >/dev/null 2>&1; then
-    PYTHON_CMD="python"
-    PIP_CMD="pip"
-else
-    echo "错误: 未找到Python"
+# 检测conda环境
+if command -v conda >/dev/null 2>&1; then
+    echo "检测到conda环境"
+    if [ -n "$CONDA_DEFAULT_ENV" ]; then
+        echo "当前conda环境: $CONDA_DEFAULT_ENV"
+    fi
+fi
+
+# 检测Python环境
+echo "检测Python环境..."
+PYTHON_FOUND="false"
+
+# 按优先级检测Python
+for python_cmd in python3.11 python3.10 python3.9 python3.8 python3 python; do
+    if command -v "$python_cmd" >/dev/null 2>&1; then
+        PYTHON_VERSION=$("$python_cmd" --version 2>&1 | cut -d' ' -f2)
+        PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+        PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
+        
+        echo "检测到: $python_cmd (版本: $PYTHON_VERSION)"
+        
+        if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+            echo "✅ 找到合适的Python版本: $PYTHON_VERSION"
+            PYTHON_CMD="$python_cmd"
+            PYTHON_FOUND="true"
+            
+            # 设置对应的pip命令
+            if [[ "$python_cmd" == "python3"* ]]; then
+                PIP_CMD="pip3"
+            else
+                PIP_CMD="pip"
+            fi
+            break
+        elif [ "$PYTHON_MAJOR" -eq 3 ]; then
+            echo "⚠️ Python版本($PYTHON_VERSION)低于3.8"
+        fi
+    fi
+done
+
+# 如果没有找到合适的Python，尝试用uv安装
+if [ "$PYTHON_FOUND" = "false" ]; then
+    echo "❌ 未找到合适的Python 3.8+环境"
+    
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "尝试安装uv..."
+        if command -v curl >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.cargo/bin:$PATH"
+        else
+            echo "错误: 无法安装uv，请手动安装Python 3.8+"
+            exit 1
+        fi
+    fi
+    
+    if command -v uv >/dev/null 2>&1; then
+        echo "使用uv安装Python 3.11..."
+        if uv python install 3.11 && uv python pin 3.11; then
+            echo "✅ Python 3.11安装成功"
+            PYTHON_CMD="uv run python"
+            PYTHON_SOURCE="uv"
+            PYTHON_FOUND="true"
+        else
+            echo "❌ uv安装Python失败"
+            exit 1
+        fi
+    fi
+fi
+
+if [ "$PYTHON_FOUND" = "false" ]; then
+    echo "错误: 无法获取合适的Python环境"
     exit 1
 fi
 
-echo "Python: $PYTHON_CMD"
-$PYTHON_CMD --version
+echo "选择的Python: $PYTHON_CMD"
+if [ "$PYTHON_SOURCE" != "uv" ]; then
+    echo "Python版本: $PYTHON_VERSION"
+fi
 
 # 安装依赖
 echo "安装依赖..."
-if command -v uv >/dev/null 2>&1; then
+if [ "$PYTHON_SOURCE" = "uv" ]; then
+    echo "使用uv项目模式安装依赖..."
+    uv add mcp requests requests-toolbelt starlette uvicorn
+elif command -v uv >/dev/null 2>&1 && [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+    echo "使用uv安装依赖..."
     uv pip install mcp requests requests-toolbelt starlette uvicorn
 else
+    if command -v uv >/dev/null 2>&1; then
+        echo "⚠️ Python版本($PYTHON_VERSION)低于3.8，使用pip而非uv"
+    fi
+    echo "使用pip安装依赖..."
     $PIP_CMD install mcp requests requests-toolbelt starlette uvicorn
 fi
 
@@ -383,17 +454,44 @@ $PYTHON_CMD -m py_compile main.py
 echo "✅ Python代码语法检查通过"
 
 # 创建简单的服务管理脚本
+# 保存Python环境信息
+cat > .python_env << EOF
+PYTHON_CMD="$PYTHON_CMD"
+PYTHON_SOURCE="$PYTHON_SOURCE"
+EOF
+
 cat > service.sh << 'SERVICE_EOF'
 #!/bin/bash
 WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_CMD="python3"
-[ ! -x "$(command -v python3)" ] && PYTHON_CMD="python"
+
+# 加载Python环境信息
+if [ -f "$WORK_DIR/.python_env" ]; then
+    source "$WORK_DIR/.python_env"
+else
+    # 默认检测
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_CMD="python3"
+    else
+        PYTHON_CMD="python"
+    fi
+    PYTHON_SOURCE="system"
+fi
 
 case "$1" in
     start)
         echo "启动服务..."
         cd "$WORK_DIR"
-        nohup $PYTHON_CMD main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+        
+        # 根据Python环境选择启动命令
+        case "$PYTHON_SOURCE" in
+            "uv")
+                nohup uv run python main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+                ;;
+            *)
+                nohup $PYTHON_CMD main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+                ;;
+        esac
+        
         echo $! > service.pid
         echo "服务已启动，PID: $(cat service.pid)"
         echo "访问: http://localhost:60"

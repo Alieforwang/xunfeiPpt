@@ -92,45 +92,228 @@ fix_file_encoding() {
 setup_python_environment() {
     log_info "检测Python环境..."
     
-    # 检测Python命令和版本
-    if command -v python3 >/dev/null 2>&1; then
-        PYTHON_CMD="python3"
-        PIP_CMD="pip3"
-        PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-    elif command -v python >/dev/null 2>&1; then
-        PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
-        PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
-        if [ "$PYTHON_MAJOR" = "3" ]; then
-            PYTHON_CMD="python"
-            PIP_CMD="pip"
-        else
-            log_error "需要Python 3.x版本"
-            exit 1
+    # 检测conda环境
+    detect_conda_environment
+    
+    # 检测现有Python环境
+    detect_existing_python
+    
+    # 如果没有合适的Python环境，尝试安装
+    if [ -z "$PYTHON_CMD" ] || [ "$PYTHON_VERSION_OK" != "true" ]; then
+        install_python_with_uv
+    fi
+    
+    # 最终验证Python环境
+    validate_python_environment
+    
+    # 选择最佳包管理器
+    select_package_manager
+}
+
+# 检测conda环境
+detect_conda_environment() {
+    if command -v conda >/dev/null 2>&1; then
+        log_info "检测到conda环境"
+        CONDA_AVAILABLE="true"
+        
+        # 检查当前激活的conda环境
+        if [ -n "$CONDA_DEFAULT_ENV" ]; then
+            log_info "当前conda环境: $CONDA_DEFAULT_ENV"
+            CURRENT_CONDA_ENV="$CONDA_DEFAULT_ENV"
+        fi
+        
+        # 检查conda中的Python版本
+        if command -v python >/dev/null 2>&1; then
+            CONDA_PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
+            log_info "conda Python版本: $CONDA_PYTHON_VERSION"
+            
+            # 检查是否为Python 3.8+
+            CONDA_PYTHON_MAJOR=$(echo $CONDA_PYTHON_VERSION | cut -d'.' -f1)
+            CONDA_PYTHON_MINOR=$(echo $CONDA_PYTHON_VERSION | cut -d'.' -f2)
+            
+            if [ "$CONDA_PYTHON_MAJOR" -eq 3 ] && [ "$CONDA_PYTHON_MINOR" -ge 8 ]; then
+                log_success "conda Python版本满足要求(3.8+)"
+                PYTHON_CMD="python"
+                PIP_CMD="pip"
+                PYTHON_VERSION="$CONDA_PYTHON_VERSION"
+                PYTHON_VERSION_OK="true"
+                PYTHON_SOURCE="conda"
+                return 0
+            else
+                log_warning "conda Python版本($CONDA_PYTHON_VERSION)低于3.8"
+            fi
         fi
     else
-        log_error "未找到Python环境"
-        log_info "请先安装Python 3.x"
+        CONDA_AVAILABLE="false"
+    fi
+}
+
+# 检测现有Python环境
+detect_existing_python() {
+    log_info "检测系统Python环境..."
+    
+    # 按优先级检测Python命令
+    for python_cmd in python3.11 python3.10 python3.9 python3.8 python3 python; do
+        if command -v "$python_cmd" >/dev/null 2>&1; then
+            DETECTED_PYTHON_VERSION=$("$python_cmd" --version 2>&1 | cut -d' ' -f2)
+            DETECTED_PYTHON_MAJOR=$(echo $DETECTED_PYTHON_VERSION | cut -d'.' -f1)
+            DETECTED_PYTHON_MINOR=$(echo $DETECTED_PYTHON_VERSION | cut -d'.' -f2)
+            
+            log_info "检测到: $python_cmd (版本: $DETECTED_PYTHON_VERSION)"
+            
+            # 检查是否为Python 3.x
+            if [ "$DETECTED_PYTHON_MAJOR" -eq 3 ]; then
+                if [ "$DETECTED_PYTHON_MINOR" -ge 8 ]; then
+                    log_success "找到合适的Python版本: $DETECTED_PYTHON_VERSION"
+                    PYTHON_CMD="$python_cmd"
+                    PYTHON_VERSION="$DETECTED_PYTHON_VERSION"
+                    PYTHON_VERSION_OK="true"
+                    PYTHON_SOURCE="system"
+                    
+                    # 设置对应的pip命令
+                    if [[ "$python_cmd" == "python3"* ]]; then
+                        PIP_CMD="pip3"
+                    else
+                        PIP_CMD="pip"
+                    fi
+                    return 0
+                else
+                    log_warning "Python版本($DETECTED_PYTHON_VERSION)低于3.8"
+                fi
+            else
+                log_warning "发现Python 2.x版本，跳过"
+            fi
+        fi
+    done
+    
+    log_warning "未找到合适的Python 3.8+环境"
+    PYTHON_VERSION_OK="false"
+}
+
+# 使用uv安装Python
+install_python_with_uv() {
+    if ! command -v uv >/dev/null 2>&1; then
+        log_info "uv未安装，尝试安装uv..."
+        install_uv
+    fi
+    
+    if command -v uv >/dev/null 2>&1; then
+        log_info "使用uv安装Python 3.11..."
+        
+        # 尝试安装Python 3.11
+        if uv python install 3.11; then
+            log_success "Python 3.11安装成功"
+            
+            # 验证安装的Python
+            if uv python pin 3.11; then
+                log_success "Python 3.11已设置为项目默认版本"
+                PYTHON_CMD="uv run python"
+                PIP_CMD="uv pip"
+                PYTHON_VERSION="3.11"
+                PYTHON_VERSION_OK="true"
+                PYTHON_SOURCE="uv"
+                return 0
+            fi
+        else
+            log_warning "uv安装Python失败，将尝试其他方法"
+        fi
+    fi
+    
+    # 如果uv安装失败，提供安装建议
+    if [ "$PYTHON_VERSION_OK" != "true" ]; then
+        log_error "无法自动安装合适的Python环境"
+        log_info "请手动安装Python 3.8+，或者："
+        echo "  - 使用conda: conda install python=3.11"
+        echo "  - 使用系统包管理器: yum install python3 或 apt install python3"
+        echo "  - 从源码编译: https://www.python.org/downloads/"
+        exit 1
+    fi
+}
+
+# 安装uv
+install_uv() {
+    log_info "正在安装uv包管理器..."
+    
+    if command -v curl >/dev/null 2>&1; then
+        if curl -LsSf https://astral.sh/uv/install.sh | sh; then
+            log_success "uv安装成功"
+            # 重新加载PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+            return 0
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -qO- https://astral.sh/uv/install.sh | sh; then
+            log_success "uv安装成功"
+            export PATH="$HOME/.cargo/bin:$PATH"
+            return 0
+        fi
+    fi
+    
+    log_warning "uv自动安装失败"
+    return 1
+}
+
+# 验证Python环境
+validate_python_environment() {
+    if [ -z "$PYTHON_CMD" ]; then
+        log_error "Python环境配置失败"
         exit 1
     fi
     
-    log_success "Python命令: $PYTHON_CMD"
-    log_info "Python版本: $PYTHON_VERSION"
+    # 验证Python命令可用
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1 && [ "$PYTHON_SOURCE" != "uv" ]; then
+        log_error "Python命令不可用: $PYTHON_CMD"
+        exit 1
+    fi
     
-    # 检查Python版本是否支持uv（需要3.8+）
-    PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
-    PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+    # 显示最终选择的Python环境
+    log_success "选择的Python环境:"
+    log_info "  命令: $PYTHON_CMD"
+    log_info "  版本: $PYTHON_VERSION"
+    log_info "  来源: $PYTHON_SOURCE"
     
-    # 检测包管理器 - 根据Python版本智能选择
-    if command -v uv >/dev/null 2>&1 && [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+    # 测试Python环境
+    if [ "$PYTHON_SOURCE" = "uv" ]; then
+        log_info "测试uv Python环境..."
+        if uv run python --version >/dev/null 2>&1; then
+            log_success "uv Python环境测试通过"
+        else
+            log_error "uv Python环境测试失败"
+            exit 1
+        fi
+    else
+        log_info "测试Python环境..."
+        if "$PYTHON_CMD" --version >/dev/null 2>&1; then
+            log_success "Python环境测试通过"
+        else
+            log_error "Python环境测试失败"
+            exit 1
+        fi
+    fi
+}
+
+# 选择包管理器
+select_package_manager() {
+    log_info "选择包管理器..."
+    
+    # 根据Python来源和版本选择包管理器
+    if [ "$PYTHON_SOURCE" = "uv" ]; then
         PACKAGE_MANAGER="uv"
-        log_success "检测到uv包管理器，Python版本支持"
+        log_success "使用uv作为包管理器"
+    elif command -v uv >/dev/null 2>&1; then
+        PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+        PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
+        
+        if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+            PACKAGE_MANAGER="uv"
+            log_success "检测到uv，Python版本支持，使用uv"
+        else
+            PACKAGE_MANAGER="pip"
+            log_warning "Python版本($PYTHON_VERSION)低于3.8，使用pip"
+        fi
     else
         PACKAGE_MANAGER="pip"
-        if command -v uv >/dev/null 2>&1; then
-            log_warning "检测到uv，但Python版本($PYTHON_VERSION)低于3.8，使用pip"
-        else
-            log_info "使用pip包管理器"
-        fi
+        log_info "使用pip包管理器"
     fi
 }
 
@@ -140,15 +323,67 @@ install_dependencies() {
     
     local dependencies="mcp requests requests-toolbelt starlette uvicorn"
     
-    if [ "$PACKAGE_MANAGER" = "uv" ]; then
-        log_info "使用uv安装依赖..."
-        uv pip install $dependencies
-    else
-        log_info "使用pip安装依赖..."
-        $PIP_CMD install $dependencies
-    fi
+    case "$PACKAGE_MANAGER" in
+        "uv")
+            if [ "$PYTHON_SOURCE" = "uv" ]; then
+                log_info "使用uv在项目环境中安装依赖..."
+                uv add $dependencies
+            else
+                log_info "使用uv pip安装依赖..."
+                uv pip install $dependencies
+            fi
+            ;;
+        "pip")
+            log_info "使用pip安装依赖..."
+            if [ "$PYTHON_SOURCE" = "conda" ]; then
+                # 在conda环境中使用pip
+                pip install $dependencies
+            else
+                $PIP_CMD install $dependencies
+            fi
+            ;;
+        *)
+            log_error "未知的包管理器: $PACKAGE_MANAGER"
+            exit 1
+            ;;
+    esac
     
     log_success "依赖安装完成"
+    
+    # 验证关键依赖是否安装成功
+    verify_dependencies
+}
+
+# 验证依赖安装
+verify_dependencies() {
+    log_info "验证依赖安装..."
+    
+    local test_cmd
+    if [ "$PYTHON_SOURCE" = "uv" ]; then
+        test_cmd="uv run python -c"
+    else
+        test_cmd="$PYTHON_CMD -c"
+    fi
+    
+    # 检查关键依赖
+    local dependencies=("mcp" "requests" "starlette" "uvicorn")
+    local failed_deps=()
+    
+    for dep in "${dependencies[@]}"; do
+        if $test_cmd "import $dep" 2>/dev/null; then
+            log_info "  ✓ $dep"
+        else
+            log_warning "  ✗ $dep"
+            failed_deps+=("$dep")
+        fi
+    done
+    
+    if [ ${#failed_deps[@]} -eq 0 ]; then
+        log_success "所有依赖验证通过"
+    else
+        log_warning "部分依赖验证失败: ${failed_deps[*]}"
+        log_info "依赖可能需要时间生效，继续部署..."
+    fi
 }
 
 # 创建工作目录
@@ -206,29 +441,57 @@ fix_python_compatibility() {
 create_service_management() {
     log_info "创建服务管理脚本..."
     
+    # 保存Python环境信息供服务管理脚本使用
+    cat > "$WORK_DIR/.python_env" << EOF
+PYTHON_CMD="$PYTHON_CMD"
+PYTHON_VERSION="$PYTHON_VERSION"
+PYTHON_SOURCE="$PYTHON_SOURCE"
+PACKAGE_MANAGER="$PACKAGE_MANAGER"
+EOF
+
     # 通用服务管理脚本
     cat > "$WORK_DIR/service_manager.sh" << 'SERVICE_MANAGER_EOF'
 #!/bin/bash
 
 # 服务管理脚本 - 跨平台
+# 自动检测Python环境信息
 
 SERVICE_NAME="ppt-mcp-sse"
 WORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_CMD="python3"
 
-if ! command -v python3 >/dev/null 2>&1; then
-    if command -v python >/dev/null 2>&1; then
+# 检测Python环境（简化版本，继承部署时的选择）
+if [ -f "$WORK_DIR/.python_env" ]; then
+    source "$WORK_DIR/.python_env"
+else
+    # 默认检测
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_CMD="python3"
+    elif command -v python >/dev/null 2>&1; then
         PYTHON_CMD="python"
     else
         echo "错误: 未找到Python环境"
         exit 1
     fi
+    PYTHON_SOURCE="system"
 fi
 
 start_service() {
     echo "启动PPT MCP服务..."
     cd "$WORK_DIR"
-    nohup $PYTHON_CMD main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+    
+    # 根据Python环境选择启动命令
+    case "$PYTHON_SOURCE" in
+        "uv")
+            nohup uv run python main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+            ;;
+        "conda")
+            nohup python main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+            ;;
+        *)
+            nohup $PYTHON_CMD main.py sse --host 0.0.0.0 --port 60 > service.log 2>&1 &
+            ;;
+    esac
+    
     echo $! > service.pid
     echo "服务已启动，PID: $(cat service.pid)"
     echo "日志文件: $WORK_DIR/service.log"
@@ -339,6 +602,28 @@ setup_system_service() {
 create_basic_systemd_service() {
     local service_file="/etc/systemd/system/ppt-mcp-sse.service"
     
+    # 根据Python环境设置ExecStart命令
+    local exec_start_cmd
+    local environment_vars="Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    
+    case "$PYTHON_SOURCE" in
+        "uv")
+            exec_start_cmd="uv run python main.py sse --host 0.0.0.0 --port 60"
+            # 添加uv路径到环境变量
+            environment_vars="Environment=PATH=$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ;;
+        "conda")
+            exec_start_cmd="$PYTHON_CMD main.py sse --host 0.0.0.0 --port 60"
+            # 添加conda路径
+            if [ -n "$CONDA_PREFIX" ]; then
+                environment_vars="Environment=PATH=$CONDA_PREFIX/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            fi
+            ;;
+        *)
+            exec_start_cmd="$PYTHON_CMD main.py sse --host 0.0.0.0 --port 60"
+            ;;
+    esac
+    
     cat > "$service_file" << EOF
 [Unit]
 Description=讯飞智文PPT生成服务MCP Server - SSE传输
@@ -350,8 +635,8 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$WORK_DIR
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=$PYTHON_CMD main.py sse --host 0.0.0.0 --port 60
+$environment_vars
+ExecStart=$exec_start_cmd
 Restart=always
 RestartSec=10
 StandardOutput=journal

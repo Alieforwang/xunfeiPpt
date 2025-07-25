@@ -11,8 +11,11 @@
 ### 一键自动部署（推荐）
 
 ```bash
-# 运行自动部署脚本（支持跨平台）
-bash scripts/auto_deploy.sh
+# 运行uv专用自动部署脚本
+bash uv_deploy.sh
+
+# 自定义配置
+bash uv_deploy.sh --host 127.0.0.1 --port 8080 --protocol http-stream
 ```
 
 ### 手动部署
@@ -22,16 +25,20 @@ bash scripts/auto_deploy.sh
 git clone <repository-url>
 cd pptMcpSeriver
 
-# 2. 安装依赖（需要Python 3.13+）
-uv sync
-# 或者使用 pip install mcp requests requests-toolbelt starlette uvicorn
+# 2. 安装uv和Python 3.13+
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.13
 
-# 3. 启动服务
-python main.py http-stream --host 0.0.0.0 --port 60
+# 3. 同步依赖
+uv sync
+
+# 4. 启动服务
+uv run python main.py http-stream --host 0.0.0.0 --port 60
 ```
 
 ## 📚 完整文档
 
+- **[uv部署指南](./UV_DEPLOY_README.md)** - 专用uv脚本详细使用说明
 - **[使用指南](./docs/USAGE.md)** - 完整的功能使用说明
 - **[部署指南](./docs/DEPLOYMENT_GUIDE.md)** - 详细的部署说明和故障排除
 - **[服务管理](./docs/SERVICE_GUIDE.md)** - systemd服务管理指南
@@ -54,11 +61,11 @@ python main.py http-stream --host 0.0.0.0 --port 60
 - **sse** - Server-Sent Events（已废弃，兼容性支持）
 
 ### 🔧 部署特性
-- 跨平台自动部署 (Linux/macOS/Windows)
+- 专用uv环境管理 (按MCP+uv官网标准)
 - Python 3.13+ 环境自动安装
-- uv/pip 包管理器智能选择
-- systemd 服务自动配置 (Linux)
-- 智能文件编码转换
+- 标准pyproject.toml配置和uv sync依赖管理
+- 参数化配置支持 (host/port/protocol)
+- 自动生成服务管理脚本
 
 ## 📁 项目结构
 
